@@ -2,14 +2,16 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/audio_cache_service.dart';
 import 'kid_layout_constants.dart';
 import 'widgets/kid_session_nav_button.dart';
+import 'widgets/library_cabinet_background.dart';
 
-/// Bibliotek – baggrund [bogskabbaggrund.png], bøger på hylder.
+/// Bibliotek – tegnet bogskab (hylder i kode), bøger på hylder.
 class KidLibraryScreen extends StatefulWidget {
   final String kidId;
 
@@ -184,18 +186,34 @@ class _KidLibraryScreenState extends State<KidLibraryScreen> {
     }
   }
 
-  /// Første 3 på øverste hylde, resten på næste (vandret scroll ved >3 pr. hylde).
-  List<List<Map<String, dynamic>>> _itemsOnTwoShelves() {
+  /// Op til 2 pr. hylde (større forsider), fylder fra oven; overskud på nederste hylde.
+  List<List<Map<String, dynamic>>> _itemsOnCabinetShelves() {
+    const maxPerShelf = 2;
+    final n = LibraryCabinetShelfLayout.shelfCount;
     if (_shelfItems.isEmpty) {
-      return [[], []];
+      return List.generate(n, (_) => <Map<String, dynamic>>[]);
     }
-    final first = _shelfItems.length <= 3
-        ? List<Map<String, dynamic>>.from(_shelfItems)
-        : _shelfItems.sublist(0, 3);
-    final second = _shelfItems.length <= 3
-        ? <Map<String, dynamic>>[]
-        : _shelfItems.sublist(3);
-    return [first, second];
+    final rows = <List<Map<String, dynamic>>>[];
+    for (var i = 0; i < _shelfItems.length; i += maxPerShelf) {
+      rows.add(
+        _shelfItems.sublist(
+          i,
+          math.min(i + maxPerShelf, _shelfItems.length),
+        ),
+      );
+    }
+    if (rows.length > n) {
+      final overflow = <Map<String, dynamic>>[];
+      for (var r = n - 1; r < rows.length; r++) {
+        overflow.addAll(rows[r]);
+      }
+      rows.removeRange(n, rows.length);
+      rows[n - 1] = [...rows[n - 1], ...overflow];
+    }
+    while (rows.length < n) {
+      rows.add([]);
+    }
+    return rows;
   }
 
   @override
@@ -213,11 +231,36 @@ class _KidLibraryScreenState extends State<KidLibraryScreen> {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/bogskabbaggrund.png',
+            child: SvgPicture.asset(
+              'assets/alfamonbaggrund.svg',
               fit: BoxFit.cover,
               alignment: Alignment.center,
-              filterQuality: FilterQuality.medium,
+            ),
+          ),
+          Center(
+            child: SizedBox(
+              width: screenSize.width,
+              height: screenSize.height,
+              child: Transform.scale(
+                scale: 0.8,
+                alignment: Alignment.center,
+                filterQuality: FilterQuality.medium,
+                child: Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.none,
+                  children: [
+                    const LibraryCabinetBackground(showWallBackdrop: false),
+                    if (showBookOverlay)
+                      _BogskabShelfOverlay(
+                        maxWidth: screenSize.width,
+                        maxHeight: screenSize.height,
+                        kidId: widget.kidId,
+                        booksPerShelf: _itemsOnCabinetShelves(),
+                        isTablet: isTablet,
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
           // Let mørkning øverst så titel og knap læses bedre
@@ -239,17 +282,6 @@ class _KidLibraryScreenState extends State<KidLibraryScreen> {
               ),
             ),
           ),
-          // Bøger direkte på hyldelinjerne i bogskabbaggrund (fuld skærm som billedet)
-          if (showBookOverlay)
-            Positioned.fill(
-              child: _BogskabShelfOverlay(
-                maxWidth: screenSize.width,
-                maxHeight: screenSize.height,
-                kidId: widget.kidId,
-                booksPerShelf: _itemsOnTwoShelves(),
-                isTablet: isTablet,
-              ),
-            ),
           SafeArea(
             bottom: true,
             child: Column(
@@ -344,9 +376,8 @@ class _KidLibraryScreenState extends State<KidLibraryScreen> {
   }
 }
 
-/// To hylder matchet til træhylderne i [bogskabbaggrund.png] (1024², centreret).
-/// Brøkdele er af **fuld skærmhøjde** så de følger `BoxFit.cover` som baggrunden.
-/// Juster [_kBgShelfBands] hvis illustrationen opdateres.
+/// Hylder matchet til [LibraryCabinetShelfLayout.shelfBands] og [LibraryCabinetBackground].
+/// Brøkdele er af fuld skærmhøjde; børnene ligger i båndet med bund ved hyldelinjen.
 class _BogskabShelfOverlay extends StatelessWidget {
   const _BogskabShelfOverlay({
     required this.maxWidth,
@@ -364,18 +395,9 @@ class _BogskabShelfOverlay extends StatelessWidget {
 
   static const double _coverAspect = 1.42;
 
-  /// `top`/`bottom` = andel fra skærmens top; bøger [Align.bottomCenter] i båndet
-  /// så deres bund ligger ved `bottom` (hyldelinjen foran skuffeafsnittet).
-  static const List<({double top, double bottom})> _kBgShelfBands = [
-    (top: 0.168, bottom: 0.388),
-    (top: 0.432, bottom: 0.652),
-  ];
-
-  /// Flyt hylder ~10 % ned ift. baggrund (samme offset på top og bund).
-  static const double _kShelfVerticalShift = 0.10;
-
-  /// Indryk så bøgerne står i åbningen mellem træstolperne.
-  static double _sideInset(double w) => (w * 0.125).clamp(14.0, 56.0);
+  /// Samme som planke-kant i [_LibraryCabinetPainter]: ramme + 12px.
+  static double _sideInset(double w) =>
+      (w * 0.055).clamp(12.0, 48.0) + 12.0;
 
   @override
   Widget build(BuildContext context) {
@@ -389,22 +411,27 @@ class _BogskabShelfOverlay extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         for (var s = 0;
-            s < booksPerShelf.length && s < _kBgShelfBands.length;
+            s < booksPerShelf.length &&
+                s < LibraryCabinetShelfLayout.shelfBands.length;
             s++)
           Positioned(
             left: inset,
             right: inset,
             top: maxHeight *
-                (_kBgShelfBands[s].top + _kShelfVerticalShift).clamp(0.0, 0.88),
+                LibraryCabinetShelfLayout.shelfBands[s].top.clamp(
+                  0.0,
+                  0.92,
+                ),
             height: maxHeight *
-                (_kBgShelfBands[s].bottom - _kBgShelfBands[s].top),
+                (LibraryCabinetShelfLayout.shelfBands[s].bottom -
+                    LibraryCabinetShelfLayout.shelfBands[s].top),
             child: _CabinetShelfRow(
               shelfBooks: booksPerShelf[s],
               kidId: kidId,
               isTablet: isTablet,
               coverAspect: _coverAspect,
               overlayOnArtwork: true,
-              overlayLayoutWidthSlots: 3,
+              overlayLayoutWidthSlots: 2,
             ),
           ),
       ],
@@ -440,6 +467,8 @@ class _CabinetShelfRow extends StatelessWidget {
     required double coverAspect,
     bool captionBelow = true,
     int? widthSlots,
+    double bookScaleFactor = 1.95,
+    double widthCapFraction = 0.364,
   }) {
     final gap = isTablet ? 8.0 : 5.0;
     if (bookCount <= 0 || innerW <= 0 || rowMaxHeight <= 0) {
@@ -459,8 +488,10 @@ class _CabinetShelfRow extends StatelessWidget {
     }
 
     final fromRow = (innerW - (slotCount - 1) * gap) / slotCount;
-    // Højere loft på bredde så 1,3× skalering bedre kan udnyttes på hylden
-    final capW = math.min(innerW * 0.364, rowMaxHeight * coverAspect * 0.92);
+    final capW = math.min(
+      innerW * widthCapFraction,
+      rowMaxHeight * coverAspect * 0.92,
+    );
     var bookW = math.min(fromRow, capW);
     var bookH = math.min(bookW * coverAspect, maxBodyH);
     bookW = bookH / coverAspect;
@@ -484,10 +515,8 @@ class _CabinetShelfRow extends StatelessWidget {
       }
     }
 
-    // Tidligere 1,3×; nu yderligere ~50 % større → 1,3 × 1,5 ≈ 1,95
-    const bookScale = 1.95;
-    bookW *= bookScale;
-    bookH *= bookScale;
+    bookW *= bookScaleFactor;
+    bookH *= bookScaleFactor;
     bookH = math.min(bookH, maxBodyH);
     bookW = bookH / coverAspect;
     var totalW = bookCount * bookW + (bookCount - 1) * gap;
@@ -528,6 +557,8 @@ class _CabinetShelfRow extends StatelessWidget {
           coverAspect: coverAspect,
           captionBelow: !overlayOnArtwork,
           widthSlots: overlayOnArtwork ? overlayLayoutWidthSlots : null,
+          bookScaleFactor: overlayOnArtwork ? 2.45 : 1.95,
+          widthCapFraction: overlayOnArtwork ? 0.48 : 0.364,
         );
 
         final need =
@@ -632,12 +663,16 @@ class _ShelfBookTile extends StatelessWidget {
             ),
           )
         : (coverUrl != null && coverUrl.isNotEmpty
-            ? Image.network(
-                coverUrl,
-                fit: BoxFit.cover,
-                width: width,
-                height: height,
-                errorBuilder: (_, _, _) => _bookFallback(title),
+            ? ColoredBox(
+                color: const Color(0xFF4E342E),
+                child: Image.network(
+                  coverUrl,
+                  fit: BoxFit.contain,
+                  width: width,
+                  height: height,
+                  alignment: Alignment.center,
+                  errorBuilder: (_, _, _) => _bookFallback(title),
+                ),
               )
             : _bookFallback(title));
 

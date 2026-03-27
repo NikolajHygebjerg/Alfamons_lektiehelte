@@ -1,5 +1,8 @@
 -- Udfordringer mellem børn under samme forælder
 -- Børn kan kun udfordre andre børn med samme parent_id
+--
+-- AFHÆNGIGHED: 20250301025000_avatars_bootstrap.sql (kid_match_rounds FK → avatars.id).
+-- Kræver også kids + profiles (bootstrap eller eksisterende skema).
 
 -- Invitationer: A udfordrer B
 CREATE TABLE IF NOT EXISTS kid_match_invitations (
@@ -42,6 +45,7 @@ CREATE TABLE IF NOT EXISTS kid_match_rounds (
 );
 
 -- RLS: børn kan kun se invitationer/kampe hvor de er involveret
+DROP POLICY IF EXISTS "Kids see own invitations" ON kid_match_invitations;
 CREATE POLICY "Kids see own invitations" ON kid_match_invitations
   FOR ALL USING (
     auth.uid() IN (
@@ -51,6 +55,7 @@ CREATE POLICY "Kids see own invitations" ON kid_match_invitations
     )
   );
 
+DROP POLICY IF EXISTS "Kids see own matches" ON kid_matches;
 CREATE POLICY "Kids see own matches" ON kid_matches
   FOR ALL USING (
     auth.uid() IN (
@@ -60,6 +65,7 @@ CREATE POLICY "Kids see own matches" ON kid_matches
     )
   );
 
+DROP POLICY IF EXISTS "Kids see own match rounds" ON kid_match_rounds;
 CREATE POLICY "Kids see own match rounds" ON kid_match_rounds
   FOR ALL USING (
     auth.uid() IN (
@@ -87,13 +93,44 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS on_invitation_accepted ON kid_match_invitations;
 CREATE TRIGGER on_invitation_accepted
   AFTER UPDATE ON kid_match_invitations
   FOR EACH ROW
   WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'accepted')
   EXECUTE FUNCTION create_match_on_accept();
 
--- Realtime: Tilføj tabeller til supabase_realtime publication
-ALTER PUBLICATION supabase_realtime ADD TABLE kid_match_invitations;
-ALTER PUBLICATION supabase_realtime ADD TABLE kid_matches;
-ALTER PUBLICATION supabase_realtime ADD TABLE kid_match_rounds;
+-- Realtime: Tilføj tabeller til supabase_realtime publication (idempotent)
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE kid_match_invitations;
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLERRM LIKE '%already member%' OR SQLERRM LIKE '%already exists%' THEN
+      NULL;
+    ELSE
+      RAISE;
+    END IF;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE kid_matches;
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLERRM LIKE '%already member%' OR SQLERRM LIKE '%already exists%' THEN
+      NULL;
+    ELSE
+      RAISE;
+    END IF;
+END $$;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE kid_match_rounds;
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLERRM LIKE '%already member%' OR SQLERRM LIKE '%already exists%' THEN
+      NULL;
+    ELSE
+      RAISE;
+    END IF;
+END $$;

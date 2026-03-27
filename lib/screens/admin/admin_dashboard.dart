@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../providers/auth_provider.dart';
+import '../../providers/profile_role_provider.dart';
 import '../../widgets/parent_code_first_setup_dialog.dart';
-import 'admin_book_builder_screen.dart';
-
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
@@ -18,13 +17,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ProfileRoleProvider>().refresh();
       ParentCodeFirstSetupDialog.showIfNeeded(context);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final canAccessBookBuilder = AdminBookBuilderScreen.canAccess(context.watch<AuthProvider>());
+    final canAccessBookBuilder =
+        context.watch<ProfileRoleProvider>().isAdmin;
 
     return Scaffold(
       appBar: AppBar(
@@ -32,6 +34,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
         actions: [
+          const AdminMenuToolbarButton(),
           TextButton.icon(
             onPressed: () => context.go('/'),
             icon: const Icon(Icons.logout, color: Colors.white, size: 20),
@@ -63,6 +66,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
               onTap: () => context.push('/admin/tasks'),
             ),
             _AdminTile(
+              icon: Icons.calculate,
+              title: 'Matematik',
+              subtitle: 'Mapper, opgaver og guldmønter pr. mappe',
+              onTap: () => context.push('/admin/math'),
+            ),
+            _AdminTile(
               icon: Icons.store,
               title: 'Bogbutik',
               subtitle: 'Køb Læs-let bøger til børnene',
@@ -86,12 +95,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               title: 'Indstillinger',
               subtitle: 'Konto og app',
               onTap: () => context.push('/admin/settings'),
-            ),
-            _AdminTile(
-              icon: Icons.volume_up,
-              title: 'Lydtest',
-              subtitle: 'Afspil alle tale- og spillyde',
-              onTap: () => context.push('/admin/audio-test'),
             ),
           ],
         ),

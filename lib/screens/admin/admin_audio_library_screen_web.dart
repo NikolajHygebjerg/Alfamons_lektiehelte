@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 /// På web bruges [dart:io] ikke – fuldt lydbibliotek med optagelse findes på iOS/macOS.
 class AdminAudioLibraryScreen extends StatelessWidget {
@@ -14,6 +15,9 @@ class AdminAudioLibraryScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/admin/book-builder'),
         ),
+        actions: const [
+          AdminMenuToolbarButton(lightOnDark: false),
+        ],
       ),
       body: const Center(
         child: Padding(

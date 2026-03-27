@@ -12,9 +12,11 @@ CREATE TABLE IF NOT EXISTS shop_book_purchases (
 
 ALTER TABLE shop_book_purchases ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated read purchases" ON shop_book_purchases;
 CREATE POLICY "Authenticated read purchases" ON shop_book_purchases
   FOR SELECT USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Authenticated insert own purchase" ON shop_book_purchases;
 CREATE POLICY "Authenticated insert own purchase" ON shop_book_purchases
   FOR INSERT TO authenticated
   WITH CHECK (

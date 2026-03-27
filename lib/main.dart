@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'providers/auth_provider.dart';
+import 'providers/profile_role_provider.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
@@ -16,6 +17,7 @@ import 'screens/admin/admin_kids_screen.dart';
 import 'screens/admin/admin_kid_edit_screen.dart';
 import 'models/kid.dart';
 import 'screens/admin/admin_tasks_screen.dart';
+import 'screens/admin/admin_math_screen.dart';
 import 'screens/admin/admin_avatars_screen.dart';
 import 'screens/admin/admin_settings_screen.dart';
 import 'screens/admin/admin_approvals_screen.dart';
@@ -26,8 +28,11 @@ import 'screens/admin/admin_bogbutik_screen.dart';
 import 'screens/kid/kid_select_screen.dart';
 import 'screens/kid/kid_today_screen.dart';
 import 'screens/kid/kid_tasks_screen.dart';
+import 'screens/kid/kid_math_browse_screen.dart';
+import 'screens/kid/kid_math_play_screen.dart';
 import 'screens/kid/kid_week_screen.dart';
 import 'screens/kid/kid_library_screen.dart';
+import 'screens/kid/kid_library_group_screen.dart';
 import 'screens/kid/kid_alfamons_screen.dart';
 import 'screens/kid/kid_book_reader_screen.dart';
 import 'screens/kid/kid_achievements_screen.dart';
@@ -35,7 +40,6 @@ import 'screens/kid/kid_spil_screen.dart';
 import 'screens/kid/kid_spil_pvp_screen.dart';
 import 'screens/kid/kid_spil_mode_screen.dart';
 import 'screens/kid/kid_spil_ven_screen.dart';
-import 'screens/debug/audio_test_screen.dart';
 import 'services/audio_cache_service.dart';
 import 'services/supabase_service.dart';
 import 'services/kid_invitation_service.dart';
@@ -90,8 +94,13 @@ class AlfamonApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<AuthProvider>.value(
-      value: authProvider,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ChangeNotifierProvider<ProfileRoleProvider>(
+          create: (_) => ProfileRoleProvider(),
+        ),
+      ],
       child: PendingChallengeHandler(
         navigatorKey: _navigatorKey,
         child: MaterialApp.router(
@@ -196,6 +205,18 @@ GoRouter _router(AuthProvider authProvider) => GoRouter(
           builder: (_, __) => const AdminTasksScreen(),
         ),
         GoRoute(
+          path: 'math',
+          builder: (_, __) => const AdminMathScreen(),
+          routes: [
+            GoRoute(
+              path: 'folder/:folderId',
+              builder: (context, state) => AdminMathScreen(
+                folderId: state.pathParameters['folderId']!,
+              ),
+            ),
+          ],
+        ),
+        GoRoute(
           path: 'avatars',
           builder: (_, __) => const AdminAvatarsScreen(),
         ),
@@ -206,10 +227,6 @@ GoRouter _router(AuthProvider authProvider) => GoRouter(
         GoRoute(
           path: 'approvals',
           builder: (_, __) => const AdminApprovalsScreen(),
-        ),
-        GoRoute(
-          path: 'audio-test',
-          builder: (_, __) => const AudioTestScreen(),
         ),
         GoRoute(
           path: 'bogbutik',
@@ -253,6 +270,31 @@ GoRouter _router(AuthProvider authProvider) => GoRouter(
       },
     ),
     GoRoute(
+      path: '/kid/math/:kidId',
+      builder: (context, state) {
+        final kidId = state.pathParameters['kidId']!;
+        return KidMathBrowseScreen(kidId: kidId);
+      },
+      routes: [
+        GoRoute(
+          path: 'folder/:folderId',
+          builder: (context, state) {
+            final kidId = state.pathParameters['kidId']!;
+            final folderId = state.pathParameters['folderId']!;
+            return KidMathBrowseScreen(kidId: kidId, folderId: folderId);
+          },
+        ),
+        GoRoute(
+          path: 'play/:folderId',
+          builder: (context, state) {
+            final kidId = state.pathParameters['kidId']!;
+            final folderId = state.pathParameters['folderId']!;
+            return KidMathPlayScreen(kidId: kidId, folderId: folderId);
+          },
+        ),
+      ],
+    ),
+    GoRoute(
       path: '/kid/week/:kidId',
       builder: (context, state) {
         final kidId = state.pathParameters['kidId']!;
@@ -279,6 +321,14 @@ GoRouter _router(AuthProvider authProvider) => GoRouter(
             final kidId = state.pathParameters['kidId']!;
             final bookId = state.pathParameters['bookId']!;
             return KidBookReaderScreen(kidId: kidId, bookId: bookId);
+          },
+        ),
+        GoRoute(
+          path: 'group/:groupId',
+          builder: (context, state) {
+            final kidId = state.pathParameters['kidId']!;
+            final groupId = state.pathParameters['groupId']!;
+            return KidLibraryGroupScreen(kidId: kidId, groupId: groupId);
           },
         ),
       ],

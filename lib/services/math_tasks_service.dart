@@ -8,6 +8,33 @@ class MathTasksService {
   MathTasksService._();
   static final _client = Supabase.instance.client;
 
+  /// Besked til UI ved fejl mod matematik-tabeller (uden at skjule den rigtige årsag).
+  static String describeLoadError(Object error) {
+    if (error is PostgrestException) {
+      final m = error.message;
+      final code = error.code ?? '';
+      final lower = m.toLowerCase();
+      // KUN tydelige "tabel findes ikke i PostgREST schema cache" – ikke permission/RLS/andre fejl.
+      final missingInApiCache = code == 'PGRST205' ||
+          lower.contains('could not find the table') ||
+          (lower.contains('schema cache') && lower.contains('could not find'));
+      if (missingInApiCache) {
+        return 'PostgREST kan ikke se matematik-tabellerne endnu.\n\n'
+            'Tjek: Table Editor har math_folders / math_tasks. Er SQL kørt i '
+            'samme projekt som appens Supabase-URL?\n\n'
+            'Prøv: Dashboard → Project Settings → API → reload af schema '
+            '(eller kort ventetid efter ny tabel).\n\n'
+            'Detalje: $m (kode: $code)';
+      }
+      return m.isNotEmpty ? '$m\n(kode: $code)' : error.toString();
+    }
+    final s = error.toString();
+    if (s.contains('SocketException') || s.contains('Failed host lookup')) {
+      return 'Ingen forbindelse til netværket.';
+    }
+    return s;
+  }
+
   static Future<String?> _profileId() async {
     final user = _client.auth.currentUser;
     if (user == null) return null;
@@ -242,19 +269,35 @@ class MathTasksService {
     required String prompt,
     required String answer,
   }) async {
+    await addTasks(
+      folderId: folderId,
+      items: [(prompt: prompt, answer: answer)],
+    );
+  }
+
+  /// Indsæt flere opgaver i rækkefølge (stigende [sort_order]) efter eksisterende.
+  static Future<void> addTasks({
+    required String folderId,
+    required List<({String prompt, String answer})> items,
+  }) async {
+    if (items.isEmpty) return;
     final existing = await fetchTasks(folderId);
-    final nextOrder = existing.isEmpty
+    var nextOrder = existing.isEmpty
         ? 0
         : existing
                 .map((t) => (t['sort_order'] as num?)?.toInt() ?? 0)
                 .reduce((a, b) => a > b ? a : b) +
             1;
-    await _client.from('math_tasks').insert({
-      'folder_id': folderId,
-      'prompt': prompt,
-      'answer': answer,
-      'sort_order': nextOrder,
-    });
+    final rows = <Map<String, dynamic>>[];
+    for (final it in items) {
+      rows.add({
+        'folder_id': folderId,
+        'prompt': it.prompt,
+        'answer': it.answer,
+        'sort_order': nextOrder++,
+      });
+    }
+    await _client.from('math_tasks').insert(rows);
   }
 
   static Future<void> deleteTask(String taskId) async {

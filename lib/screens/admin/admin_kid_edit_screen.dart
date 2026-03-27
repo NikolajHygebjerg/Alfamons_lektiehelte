@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/kid.dart';
 import '../../models/task.dart';
 import '../../utils/recurring_task_schedule.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 import '../../widgets/admin/recurring_task_schedule_dialog.dart';
 
 /// Admin: Rediger barn – avatar, PIN, opgavetildeling.
@@ -398,6 +399,7 @@ class _AdminKidEditScreenState extends State<AdminKidEditScreen> {
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
         actions: [
+          const AdminMenuToolbarButton(),
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: _saveNameAndPin,

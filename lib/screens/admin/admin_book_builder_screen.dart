@@ -3,18 +3,12 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../providers/auth_provider.dart';
+import '../../providers/profile_role_provider.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
-const _bookBuilderEmail = 'nikolaj@begejstring.dk';
-
-/// Bogbuilder – kun tilgængelig for nikolaj@begejstring.dk
+/// Bogbuilder – kun for administratorer ([ProfileRoleProvider.isAdmin]).
 class AdminBookBuilderScreen extends StatefulWidget {
   const AdminBookBuilderScreen({super.key});
-
-  static bool canAccess(AuthProvider auth) {
-    final email = auth.user?.email?.toLowerCase().trim();
-    return email == _bookBuilderEmail;
-  }
 
   @override
   State<AdminBookBuilderScreen> createState() => _AdminBookBuilderScreenState();
@@ -60,8 +54,8 @@ class _AdminBookBuilderScreenState extends State<AdminBookBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    if (!AdminBookBuilderScreen.canAccess(auth)) {
+    final isAppAdmin = context.watch<ProfileRoleProvider>().isAdmin;
+    if (!isAppAdmin) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Bogbuilder'),
@@ -71,6 +65,7 @@ class _AdminBookBuilderScreenState extends State<AdminBookBuilderScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/admin'),
           ),
+          actions: const [AdminMenuToolbarButton()],
         ),
         body: const Center(
           child: Padding(
@@ -95,6 +90,7 @@ class _AdminBookBuilderScreenState extends State<AdminBookBuilderScreen> {
           onPressed: () => context.go('/admin'),
         ),
         actions: [
+          const AdminMenuToolbarButton(),
           IconButton(
             icon: const Icon(Icons.library_music),
             tooltip: 'Lydbibliotek',

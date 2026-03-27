@@ -16,7 +16,8 @@ alter table public.points_ledger
         'task'::text,
         'daily_bonus'::text,
         'book'::text,
-        'gold_earn'::text
+        'gold_earn'::text,
+        'math'::text
       ]
     )
   );

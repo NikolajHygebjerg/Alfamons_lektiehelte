@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/supabase_config.dart';
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -91,7 +93,10 @@ class _AuthScreenState extends State<AuthScreen> {
       _isLoading = true;
     });
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: SupabaseConfig.authEmailRedirectTo,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Tjek din email for nulstilling')),
@@ -129,26 +134,23 @@ class _AuthScreenState extends State<AuthScreen> {
               builder: (context, constraints) {
                 // Design-størrelse tilpasset iPad vs iPhone
                 final designWidth = isTablet ? 450.0 : 360.0;
-                final designHeight = isTablet ? 900.0 : 750.0;
                 // Layout tilpasset hvert design
                 final topSpacing = isTablet ? 280.0 : 200.0;
                 final textSize = isTablet ? 16.0 : 14.0;
                 final smallTextSize = isTablet ? 14.0 : 13.0;
+                final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
                 return Center(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.viewInsetsOf(context).bottom,
-                    ),
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomInset),
                     child: SizedBox(
                       width: designWidth,
-                      height: designHeight,
                       child: Form(
                         key: _formKey,
                         child: Padding(
                           padding: EdgeInsets.symmetric(
                               horizontal: isTablet ? 48 : 32),
                           child: Column(
-                    mainAxisSize: MainAxisSize.max,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(height: topSpacing),
                       if (_errorMessage != null)
@@ -288,20 +290,23 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ),
                         ),
                       ),
-                      const Spacer(),
-                      // Tekst nederst – uden sort baggrund
+                      const SizedBox(height: 10),
                       TextButton(
                         onPressed: _isLoading
                             ? null
                             : () => setState(() => _isSignUp = !_isSignUp),
                         style: TextButton.styleFrom(
                           foregroundColor: const Color(0xFFE8DCC8),
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: Text(
                           _isSignUp
                               ? 'Har du allerede en konto? Log ind'
                               : 'Har du ikke en konto? Opret',
                           style: TextStyle(fontSize: textSize),
+                          textAlign: TextAlign.center,
                         ),
                       ),
                       if (!_isSignUp)
@@ -309,13 +314,15 @@ class _AuthScreenState extends State<AuthScreen> {
                           onPressed: _isLoading ? null : _resetPassword,
                           style: TextButton.styleFrom(
                             foregroundColor: const Color(0xFFE8DCC8),
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           child: Text(
                             'Glemt adgangskode?',
                             style: TextStyle(fontSize: smallTextSize),
                           ),
                         ),
-                      const SizedBox(height: 24),
                           ],
                           ),
                         ),

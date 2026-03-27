@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/task.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 import '../../widgets/admin/task_emoji_picker_sheet.dart';
 
 class AdminTasksScreen extends StatefulWidget {
@@ -333,6 +334,7 @@ class _AdminTasksScreenState extends State<AdminTasksScreen> {
         title: const Text('Opgaver'),
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
+        actions: const [AdminMenuToolbarButton()],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

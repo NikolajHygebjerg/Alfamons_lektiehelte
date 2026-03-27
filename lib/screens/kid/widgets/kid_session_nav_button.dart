@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Pil / log ud: på barnets **hjem** → vælg barn; ellers `pop` hvis muligt, ellers [fallbackLocation] eller `/kid/today/[kidId]`.
+/// Pil / log ud: på barnets **hjem** → forsiden (vælg admin/barn); ellers `pop` eller [fallbackLocation].
 class KidSessionNavButton extends StatelessWidget {
   const KidSessionNavButton({
     super.key,
@@ -17,7 +17,7 @@ class KidSessionNavButton extends StatelessWidget {
 
   void _onPressed(BuildContext context) {
     if (isHome) {
-      context.go('/kid/select');
+      context.go('/');
       return;
     }
     if (context.canPop()) {
@@ -35,7 +35,7 @@ class KidSessionNavButton extends StatelessWidget {
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: IconButton(
-        tooltip: isHome ? 'Vælg barn' : 'Tilbage',
+        tooltip: isHome ? 'Til forsiden' : 'Tilbage',
         icon: isHome
             ? Transform.flip(
                 flipX: true,

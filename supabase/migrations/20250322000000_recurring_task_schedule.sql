@@ -1,5 +1,7 @@
 -- Planlægning af tilbagevendende opgaver per barn
 -- Kør i Supabase SQL Editor hvis migration ikke kører automatisk.
+--
+-- AFHÆNGIGHED: 20250301030000_tasks_recurring_bootstrap.sql (opretter recurring_tasks).
 
 alter table public.recurring_tasks
   add column if not exists schedule_mode text not null default 'every_day';

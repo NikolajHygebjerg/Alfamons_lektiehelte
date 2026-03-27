@@ -23,17 +23,21 @@ CREATE TABLE IF NOT EXISTS shop_book_pages (
 ALTER TABLE shop_books ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop_book_pages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated read shop_books" ON shop_books;
 CREATE POLICY "Authenticated read shop_books" ON shop_books
   FOR SELECT USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Authenticated read shop_book_pages" ON shop_book_pages;
 CREATE POLICY "Authenticated read shop_book_pages" ON shop_book_pages
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Service role / admin skriver via app – tillad insert/update/delete for authenticated
 -- (Admin book builder bruger samme auth – vi begrænser i appen til nikolaj@begejstring.dk)
+DROP POLICY IF EXISTS "Authenticated all shop_books" ON shop_books;
 CREATE POLICY "Authenticated all shop_books" ON shop_books
   FOR ALL USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Authenticated all shop_book_pages" ON shop_book_pages;
 CREATE POLICY "Authenticated all shop_book_pages" ON shop_book_pages
   FOR ALL USING (auth.role() = 'authenticated');
 
@@ -44,10 +48,12 @@ SELECT 'book-images', 'book-images', true
 WHERE NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'book-images');
 
 -- RLS for storage: authenticated kan uploade og læse
+DROP POLICY IF EXISTS "Authenticated upload book-images" ON storage.objects;
 CREATE POLICY "Authenticated upload book-images" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'book-images' AND auth.role() = 'authenticated'
   );
 
+DROP POLICY IF EXISTS "Public read book-images" ON storage.objects;
 CREATE POLICY "Public read book-images" ON storage.objects
   FOR SELECT USING (bucket_id = 'book-images');

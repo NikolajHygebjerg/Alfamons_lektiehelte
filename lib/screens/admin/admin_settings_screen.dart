@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/profile_role_provider.dart';
 import '../../services/parent_code_service.dart';
 import '../../widgets/admin/admin_menu_toolbar_button.dart';
+import '../../widgets/admin/admin_users_settings_section.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -23,6 +25,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ProfileRoleProvider>().refresh();
+    });
     _loadApprovalCode();
   }
 
@@ -345,6 +351,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   Widget build(BuildContext context) {
     final email =
         Supabase.instance.client.auth.currentUser?.email ?? '—';
+    final showUserMgmt = context.watch<ProfileRoleProvider>().isAdmin;
 
     return Scaffold(
       appBar: AppBar(
@@ -358,6 +365,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (showUserMgmt) ...[
+                const AdminUsersSettingsSection(),
+                const SizedBox(height: 16),
+              ],
               Card(
                 color: const Color(0xFFF9C433).withValues(alpha: 0.9),
                 child: Padding(

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/kid.dart';
 import '../../services/math_tasks_service.dart';
 import '../../utils/math_task_parse.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 class AdminMathScreen extends StatefulWidget {
   const AdminMathScreen({super.key, this.folderId});
@@ -23,6 +24,7 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
   List<Kid> _kids = [];
   MathFolderRow? _currentFolderMeta;
   bool _loading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -31,53 +33,71 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    final profileId = await MathTasksService.currentProfileId();
-    if (!mounted) return;
-    if (profileId == null) {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final profileId = await MathTasksService.currentProfileId();
+      if (!mounted) return;
+      if (profileId == null) {
+        setState(() {
+          _profileId = null;
+          _loading = false;
+        });
+        return;
+      }
+
+      final user = Supabase.instance.client.auth.currentUser;
+      final kidsRes = user == null
+          ? <dynamic>[]
+          : await Supabase.instance.client
+              .from('kids')
+              .select('id,name,pin_code,avatar_url')
+              .eq('parent_id', profileId)
+              .order('created_at');
+
+      final folders = await MathTasksService.fetchChildFolders(
+        profileId: profileId,
+        parentId: widget.folderId,
+      );
+      List<MathTaskRow> tasks = [];
+      MathFolderRow? meta;
+      if (widget.folderId != null) {
+        tasks = await MathTasksService.fetchTasks(widget.folderId!);
+        final row = await Supabase.instance.client
+            .from('math_folders')
+            .select('id,parent_id,title,gold_coins_per_task,sort_order')
+            .eq('id', widget.folderId!)
+            .maybeSingle();
+        if (row != null) {
+          meta = Map<String, dynamic>.from(row);
+        }
+      }
+
+      if (!mounted) return;
       setState(() {
-        _profileId = null;
+        _profileId = profileId;
+        _folders = folders;
+        _tasks = tasks;
+        _kids = [
+          for (final e in kidsRes) Kid.fromJson(Map<String, dynamic>.from(e)),
+        ];
+        _currentFolderMeta = meta;
         _loading = false;
       });
-      return;
+    } catch (e, stack) {
+      debugPrint('AdminMathScreen._load: $e\n$stack');
+      if (!mounted) return;
+      setState(() {
+        _folders = [];
+        _tasks = [];
+        _kids = [];
+        _currentFolderMeta = null;
+        _loadError = MathTasksService.describeLoadError(e);
+        _loading = false;
+      });
     }
-
-    final user = Supabase.instance.client.auth.currentUser;
-    final kidsRes = user == null
-        ? <dynamic>[]
-        : await Supabase.instance.client
-            .from('kids')
-            .select('id,name,pin_code,avatar_url')
-            .eq('parent_id', profileId)
-            .order('created_at');
-
-    final folders =
-        await MathTasksService.fetchChildFolders(profileId: profileId, parentId: widget.folderId);
-    List<MathTaskRow> tasks = [];
-    MathFolderRow? meta;
-    if (widget.folderId != null) {
-      tasks = await MathTasksService.fetchTasks(widget.folderId!);
-      final row = await Supabase.instance.client
-          .from('math_folders')
-          .select('id,parent_id,title,gold_coins_per_task,sort_order')
-          .eq('id', widget.folderId!)
-          .maybeSingle();
-      if (row != null) {
-        meta = Map<String, dynamic>.from(row);
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _profileId = profileId;
-      _folders = folders;
-      _tasks = tasks;
-      _kids = [
-        for (final e in kidsRes) Kid.fromJson(Map<String, dynamic>.from(e)),
-      ];
-      _currentFolderMeta = meta;
-      _loading = false;
-    });
   }
 
   String _folderTitle() {
@@ -135,24 +155,36 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
     final raw = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ny matematikopgave'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Skriv opgaven med lighedstegn, fx:\n1+1=2 eller 12 - 3 = 9',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: c,
-              decoration: const InputDecoration(
-                labelText: 'Opgave',
-                border: OutlineInputBorder(),
+        title: const Text('Tilføj opgaver'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Én opgave per linje med lighedstegn, fx:\n'
+                '1+1=2\n'
+                '12 - 3 = 9\n\n'
+                'Du kan indsætte mange linjer på én gang.',
+                style: Theme.of(ctx).textTheme.bodySmall,
               ),
-              autofocus: true,
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: c,
+                decoration: const InputDecoration(
+                  labelText: 'Opgaver',
+                  hintText: '1+2=3\n3+4=7',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+                autofocus: true,
+                keyboardType: TextInputType.multiline,
+                minLines: 8,
+                maxLines: 18,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuller')),
@@ -164,25 +196,36 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
       ),
     );
     if (raw == null || raw.trim().isEmpty) return;
-    final parsed = parseMathTaskLine(raw);
-    if (parsed == null) {
+    final bulk = parseMathTaskPaste(raw);
+    if (bulk.tasks.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Brug formen: regnestykke=svar (med =)')),
+          const SnackBar(
+            content: Text('Ingen gyldige linjer. Brug: regnestykke=svar (med =) pr. linje.'),
+          ),
         );
       }
       return;
     }
     try {
-      await MathTasksService.addTask(
+      await MathTasksService.addTasks(
         folderId: widget.folderId!,
-        prompt: parsed.prompt,
-        answer: parsed.answer,
+        items: [
+          for (final t in bulk.tasks) (prompt: t.prompt, answer: t.answer),
+        ],
       );
       await _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Opgave tilføjet')));
+      if (!mounted) return;
+      final n = bulk.tasks.length;
+      var msg = '$n opgave${n == 1 ? '' : 'r'} tilføjet';
+      if (bulk.invalidCount > 0) {
+        final extra = bulk.invalidSamples.isEmpty
+            ? ''
+            : ' — fx: ${bulk.invalidSamples.take(2).join('; ')}';
+        final more = bulk.invalidCount > bulk.invalidSamples.length ? ' …' : '';
+        msg += '. ${bulk.invalidCount} linje${bulk.invalidCount == 1 ? '' : 'r'} ugyldig$extra$more';
       }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fejl: $e')));
@@ -390,13 +433,52 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: Text(_folderTitle())),
+        appBar: AppBar(
+          title: Text(_folderTitle()),
+          actions: const [
+            AdminMenuToolbarButton(lightOnDark: false),
+          ],
+        ),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadError != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Matematik'),
+          actions: const [
+            AdminMenuToolbarButton(lightOnDark: false),
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+                const SizedBox(height: 16),
+                Text(_loadError!, textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Prøv igen'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
     if (_profileId == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Matematik')),
+        appBar: AppBar(
+          title: const Text('Matematik'),
+          actions: const [
+            AdminMenuToolbarButton(lightOnDark: false),
+          ],
+        ),
         body: const Center(child: Text('Ikke logget ind')),
       );
     }
@@ -406,6 +488,7 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
         title: Text(_folderTitle()),
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
+        actions: const [AdminMenuToolbarButton()],
       ),
       body: RefreshIndicator(
         onRefresh: _load,

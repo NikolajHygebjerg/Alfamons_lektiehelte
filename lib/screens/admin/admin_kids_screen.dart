@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/kid.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 class AdminKidsScreen extends StatefulWidget {
   const AdminKidsScreen({super.key});
@@ -140,14 +141,51 @@ class _AdminKidsScreenState extends State<AdminKidsScreen> {
         title: const Text('Børn'),
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
+        actions: const [AdminMenuToolbarButton()],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _kids.length,
+              itemCount: _kids.length + 1,
               itemBuilder: (_, i) {
-                final k = _kids[i];
+                if (i == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Material(
+                      color: const Color(0xFFF9E8B0),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: () => context.go('/kid/select'),
+                        borderRadius: BorderRadius.circular(12),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.swap_horiz, color: Color(0xFF5A1A0D)),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Skift barn',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF5A1A0D),
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.chevron_right, color: Color(0xFF5A1A0D)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                final k = _kids[i - 1];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(

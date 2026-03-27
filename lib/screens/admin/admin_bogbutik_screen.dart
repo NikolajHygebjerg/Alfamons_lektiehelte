@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 /// Bogbutik – forældre kan købe Læs-let bøger.
 /// Forberedt til in-app køb, priser sættes til 0 kr indtil videre.
@@ -387,6 +388,7 @@ class _AdminBogbutikScreenState extends State<AdminBogbutikScreen> {
           onPressed: () => context.go('/admin'),
         ),
         actions: [
+          const AdminMenuToolbarButton(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _load,

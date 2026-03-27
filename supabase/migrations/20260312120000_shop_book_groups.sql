@@ -1,4 +1,8 @@
 -- Navngivne grupper af købte bøger pr. forælderprofil (barnets bibliotek når > 6 bøger)
+--
+-- AFHÆNGIGHED: Kør FØRST 20250317000000_shop_books.sql (opretter shop_books + shop_book_pages).
+-- Uden shop_books får du: ERROR 42P01 relation "shop_books" does not exist.
+--
 CREATE TABLE IF NOT EXISTS shop_book_groups (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   profile_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -20,9 +24,11 @@ CREATE INDEX IF NOT EXISTS idx_shop_book_group_items_group ON shop_book_group_it
 ALTER TABLE shop_book_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop_book_group_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated read shop_book_groups" ON shop_book_groups;
 CREATE POLICY "Authenticated read shop_book_groups" ON shop_book_groups
   FOR SELECT USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Authenticated manage own shop_book_groups" ON shop_book_groups;
 CREATE POLICY "Authenticated manage own shop_book_groups" ON shop_book_groups
   FOR ALL USING (
     profile_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid())
@@ -31,9 +37,11 @@ CREATE POLICY "Authenticated manage own shop_book_groups" ON shop_book_groups
     profile_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Authenticated read shop_book_group_items" ON shop_book_group_items;
 CREATE POLICY "Authenticated read shop_book_group_items" ON shop_book_group_items
   FOR SELECT USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Authenticated manage shop_book_group_items" ON shop_book_group_items;
 CREATE POLICY "Authenticated manage shop_book_group_items" ON shop_book_group_items
   FOR ALL USING (
     group_id IN (

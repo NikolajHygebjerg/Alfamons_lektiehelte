@@ -1,16 +1,17 @@
 -- Matematik: mappe-træ, opgaver pr. mappe, barnets fremskridt og tildelte børn pr. mappe.
+-- Idempotent: kan køres igen hvis tabeller allerede findes (fx delvist kørt migration).
 
-create table public.math_folders (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists public.math_folders (
+  id uuid primary key default gen_random_uuid (),
   profile_id uuid not null references public.profiles (id) on delete cascade,
   parent_id uuid references public.math_folders (id) on delete cascade,
   title text not null,
   gold_coins_per_task integer null,
   sort_order integer not null default 0,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now ()
 );
 
-create index math_folders_profile_parent_idx on public.math_folders (profile_id, parent_id);
+create index if not exists math_folders_profile_parent_idx on public.math_folders (profile_id, parent_id);
 
 create or replace function public.math_folders_parent_profile_match ()
   returns trigger
@@ -31,41 +32,41 @@ begin
 end;
 $$;
 
+drop trigger if exists math_folders_parent_profile_match_trg on public.math_folders;
 create trigger math_folders_parent_profile_match_trg
   before insert or update of parent_id, profile_id on public.math_folders
   for each row
   execute function public.math_folders_parent_profile_match ();
 
-create table public.math_folder_kids (
+create table if not exists public.math_folder_kids (
   folder_id uuid not null references public.math_folders (id) on delete cascade,
   kid_id uuid not null references public.kids (id) on delete cascade,
   primary key (folder_id, kid_id)
 );
 
-create index math_folder_kids_kid_idx on public.math_folder_kids (kid_id);
+create index if not exists math_folder_kids_kid_idx on public.math_folder_kids (kid_id);
 
-create table public.math_tasks (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists public.math_tasks (
+  id uuid primary key default gen_random_uuid (),
   folder_id uuid not null references public.math_folders (id) on delete cascade,
   prompt text not null,
   answer text not null,
   sort_order integer not null default 0,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now ()
 );
 
-create index math_tasks_folder_idx on public.math_tasks (folder_id);
+create index if not exists math_tasks_folder_idx on public.math_tasks (folder_id);
 
--- Fremskridt pr. barn og opgavemappe: resume-indeks + ulønnet antal korrekt løst (udbetales ved Afslut).
-create table public.math_progress (
+create table if not exists public.math_progress (
   kid_id uuid not null references public.kids (id) on delete cascade,
   folder_id uuid not null references public.math_folders (id) on delete cascade,
   next_task_index integer not null default 0,
   pending_gold_tasks integer not null default 0,
-  updated_at timestamptz not null default now(),
+  updated_at timestamptz not null default now (),
   primary key (kid_id, folder_id)
 );
 
-create index math_progress_folder_idx on public.math_progress (folder_id);
+create index if not exists math_progress_folder_idx on public.math_progress (folder_id);
 
 alter table public.points_ledger
   drop constraint if exists points_ledger_source_check;
@@ -93,6 +94,7 @@ alter table public.math_folder_kids enable row level security;
 alter table public.math_tasks enable row level security;
 alter table public.math_progress enable row level security;
 
+drop policy if exists math_folders_select on public.math_folders;
 create policy math_folders_select on public.math_folders
   for select using (
     profile_id in (
@@ -100,6 +102,7 @@ create policy math_folders_select on public.math_folders
     )
   );
 
+drop policy if exists math_folders_write on public.math_folders;
 create policy math_folders_write on public.math_folders
   for insert with check (
     profile_id in (
@@ -107,6 +110,7 @@ create policy math_folders_write on public.math_folders
     )
   );
 
+drop policy if exists math_folders_update on public.math_folders;
 create policy math_folders_update on public.math_folders
   for update using (
     profile_id in (
@@ -119,6 +123,7 @@ create policy math_folders_update on public.math_folders
     )
   );
 
+drop policy if exists math_folders_delete on public.math_folders;
 create policy math_folders_delete on public.math_folders
   for delete using (
     profile_id in (
@@ -126,6 +131,7 @@ create policy math_folders_delete on public.math_folders
     )
   );
 
+drop policy if exists math_folder_kids_all on public.math_folder_kids;
 create policy math_folder_kids_all on public.math_folder_kids
   for all using (
     exists (
@@ -160,6 +166,7 @@ create policy math_folder_kids_all on public.math_folder_kids
     )
   );
 
+drop policy if exists math_tasks_all on public.math_tasks;
 create policy math_tasks_all on public.math_tasks
   for all using (
     exists (
@@ -180,6 +187,7 @@ create policy math_tasks_all on public.math_tasks
     )
   );
 
+drop policy if exists math_progress_all on public.math_progress;
 create policy math_progress_all on public.math_progress
   for all using (
     exists (

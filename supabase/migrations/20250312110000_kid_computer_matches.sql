@@ -14,6 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_kid_computer_matches_kid_status
 -- RLS
 ALTER TABLE kid_computer_matches ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Kids see own computer matches" ON kid_computer_matches;
 CREATE POLICY "Kids see own computer matches" ON kid_computer_matches
   FOR ALL USING (
     auth.uid() IN (
@@ -23,4 +24,14 @@ CREATE POLICY "Kids see own computer matches" ON kid_computer_matches
     )
   );
 
-ALTER PUBLICATION supabase_realtime ADD TABLE kid_computer_matches;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE kid_computer_matches;
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLERRM LIKE '%already member%' OR SQLERRM LIKE '%already exists%' THEN
+      NULL;
+    ELSE
+      RAISE;
+    END IF;
+END $$;

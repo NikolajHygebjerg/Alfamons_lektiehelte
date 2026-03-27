@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 class AdminAvatarsScreen extends StatelessWidget {
   const AdminAvatarsScreen({super.key});
@@ -11,6 +12,7 @@ class AdminAvatarsScreen extends StatelessWidget {
         title: const Text('Avatars'),
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
+        actions: const [AdminMenuToolbarButton()],
       ),
       body: FutureBuilder(
         future: Supabase.instance.client

@@ -5,6 +5,7 @@
 DROP POLICY IF EXISTS "Authenticated upload book-images" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated update book-images" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated delete book-images" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated all book-images" ON storage.objects;
 DROP POLICY IF EXISTS "Public read book-images" ON storage.objects;
 
 -- Én samlet policy: authenticated kan gøre alt i book-images

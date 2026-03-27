@@ -10,11 +10,10 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../providers/auth_provider.dart';
+import '../../providers/profile_role_provider.dart';
 import '../../services/audio_cache_service.dart';
 import '../../utils/read_file_bytes_stub.dart' if (dart.library.io) '../../utils/read_file_bytes_io.dart' as file_reader;
-import 'admin_book_builder_screen.dart';
-
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 const _bucketName = 'book-audio';
 
 /// Lydbibliotek – opret ord med optaget lyd til brug i Læs-let bøger.
@@ -445,8 +444,8 @@ class _AdminAudioLibraryScreenState extends State<AdminAudioLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    if (!AdminBookBuilderScreen.canAccess(auth)) {
+    final isAppAdmin = context.watch<ProfileRoleProvider>().isAdmin;
+    if (!isAppAdmin) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Lydbibliotek'),
@@ -456,6 +455,7 @@ class _AdminAudioLibraryScreenState extends State<AdminAudioLibraryScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/admin/book-builder'),
           ),
+          actions: const [AdminMenuToolbarButton()],
         ),
         body: const Center(
           child: Padding(
@@ -476,6 +476,7 @@ class _AdminAudioLibraryScreenState extends State<AdminAudioLibraryScreen> {
           onPressed: () => context.go('/admin/book-builder'),
         ),
         actions: [
+          const AdminMenuToolbarButton(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _load,

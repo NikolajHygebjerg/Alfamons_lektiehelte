@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/task_completion_service.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 class AdminApprovalsScreen extends StatefulWidget {
   const AdminApprovalsScreen({super.key});
@@ -101,6 +102,7 @@ class _AdminApprovalsScreenState extends State<AdminApprovalsScreen> {
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
         actions: [
+          const AdminMenuToolbarButton(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _load,

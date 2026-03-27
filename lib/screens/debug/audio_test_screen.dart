@@ -1,6 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 /// Testside til at afspille alle lydfiler (tale-m4a og mp3).
 class AudioTestScreen extends StatefulWidget {
@@ -92,6 +93,9 @@ class _AudioTestScreenState extends State<AudioTestScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/admin'),
         ),
+        actions: const [
+          AdminMenuToolbarButton(lightOnDark: false),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

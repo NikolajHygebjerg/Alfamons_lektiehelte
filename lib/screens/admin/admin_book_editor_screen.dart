@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../utils/read_file_bytes_stub.dart' if (dart.library.io) '../../utils/read_file_bytes_io.dart' as file_reader;
+import '../../widgets/admin/admin_menu_toolbar_button.dart';
 
 const _pageSize = 1024;
 const _bucketName = 'book-images';
@@ -52,14 +53,28 @@ class _AdminBookEditorScreenState extends State<AdminBookEditorScreen> {
       return;
     }
     try {
-      // Hent bog – brug kun id, title (price_kr findes måske ikke endnu)
-      final raw = await Supabase.instance.client
-          .from('shop_books')
-          .select('id, title')
-          .eq('id', widget.bookId)
-          .maybeSingle();
+      Map<String, dynamic>? bookRes;
+      try {
+        final raw = await Supabase.instance.client
+            .from('shop_books')
+            .select('id, title, price_kr')
+            .eq('id', widget.bookId)
+            .maybeSingle();
+        if (raw != null) {
+          bookRes = Map<String, dynamic>.from(raw);
+        }
+      } on PostgrestException catch (_) {
+        final raw = await Supabase.instance.client
+            .from('shop_books')
+            .select('id, title')
+            .eq('id', widget.bookId)
+            .maybeSingle();
+        if (raw != null) {
+          bookRes = Map<String, dynamic>.from(raw);
+        }
+      }
 
-      if (raw == null || raw is! Map) {
+      if (bookRes == null) {
         if (mounted) {
           setState(() {
             _error = 'Bog ikke fundet';
@@ -69,9 +84,15 @@ class _AdminBookEditorScreenState extends State<AdminBookEditorScreen> {
         return;
       }
 
-      final bookRes = Map<String, dynamic>.from(raw as Map);
       _titleController.text = bookRes['title']?.toString() ?? '';
-      _priceController.text = '0';
+      if (bookRes.containsKey('price_kr')) {
+        final pk = bookRes['price_kr'];
+        _priceController.text = pk is num
+            ? pk.toString()
+            : (double.tryParse(pk?.toString() ?? '')?.toString() ?? '0');
+      } else {
+        _priceController.text = '0';
+      }
 
       // Hent sider
       List<Map<String, dynamic>> pages = [];
@@ -82,10 +103,9 @@ class _AdminBookEditorScreenState extends State<AdminBookEditorScreen> {
             .eq('book_id', widget.bookId)
             .order('spread_index');
 
-        final list = pagesRes is List ? pagesRes : <dynamic>[];
+        final list = pagesRes as List;
         pages = list
-            .map((e) => e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{})
-            .where((e) => e.isNotEmpty)
+            .map((e) => Map<String, dynamic>.from(e as Map))
             .toList();
         pages.sort((a, b) => ((a['spread_index'] ?? 0) as num).toInt().compareTo(((b['spread_index'] ?? 0) as num).toInt()));
       } catch (e) {
@@ -326,6 +346,7 @@ class _AdminBookEditorScreenState extends State<AdminBookEditorScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/admin/book-builder'),
           ),
+          actions: const [AdminMenuToolbarButton()],
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -341,6 +362,7 @@ class _AdminBookEditorScreenState extends State<AdminBookEditorScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/admin/book-builder'),
           ),
+          actions: const [AdminMenuToolbarButton()],
         ),
         body: Center(
           child: Padding(
@@ -392,6 +414,7 @@ class _AdminBookEditorScreenState extends State<AdminBookEditorScreen> {
               icon: const Icon(Icons.save, color: Colors.white, size: 20),
               label: const Text('Gem', style: TextStyle(color: Colors.white)),
             ),
+          const AdminMenuToolbarButton(),
         ],
       ),
       body: Container(

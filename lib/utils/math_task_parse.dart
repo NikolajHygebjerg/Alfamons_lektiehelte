@@ -17,6 +17,45 @@ MathTaskParseResult? parseMathTaskLine(String raw) {
   return MathTaskParseResult(prompt: prompt, answer: answer);
 }
 
+/// Resultat af indsætning af mange linjer (én opgave pr. linje: `regnestykke=svar`).
+class MathBulkParseResult {
+  const MathBulkParseResult({
+    required this.tasks,
+    required this.invalidCount,
+    required this.invalidSamples,
+  });
+
+  final List<MathTaskParseResult> tasks;
+  final int invalidCount;
+  final List<String> invalidSamples;
+}
+
+/// Tomme linjer springes over. Ugyldige linjer tælles; [invalidSamples] er første eksempler.
+MathBulkParseResult parseMathTaskPaste(String raw, {int maxInvalidSamples = 6}) {
+  final lines = raw.split(RegExp(r'\r?\n'));
+  final tasks = <MathTaskParseResult>[];
+  var invalidCount = 0;
+  final invalidSamples = <String>[];
+  for (final line in lines) {
+    final t = line.trim();
+    if (t.isEmpty) continue;
+    final p = parseMathTaskLine(t);
+    if (p != null) {
+      tasks.add(p);
+    } else {
+      invalidCount++;
+      if (invalidSamples.length < maxInvalidSamples) {
+        invalidSamples.add(t.length > 72 ? '${t.substring(0, 72)}…' : t);
+      }
+    }
+  }
+  return MathBulkParseResult(
+    tasks: tasks,
+    invalidCount: invalidCount,
+    invalidSamples: invalidSamples,
+  );
+}
+
 String _normSpaces(String s) => s.trim().replaceAll(RegExp(r'\s+'), '');
 
 /// Sammenlign barnets svar med forventet (tillader mellemrum; numerisk hvis begge parser).
