@@ -67,7 +67,9 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
         tasks = await MathTasksService.fetchTasks(widget.folderId!);
         final row = await Supabase.instance.client
             .from('math_folders')
-            .select('id,parent_id,title,gold_coins_per_task,sort_order')
+            .select(
+              'id,parent_id,title,gold_coins_per_task,math_help_gold_cost,sort_order',
+            )
             .eq('id', widget.folderId!)
             .maybeSingle();
         if (row != null) {
@@ -245,8 +247,12 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
     final title = row['title'] as String? ?? '';
 
     final existingGold = (row['gold_coins_per_task'] as num?)?.toInt();
+    final existingHelp = (row['math_help_gold_cost'] as num?)?.toInt();
     final goldController = TextEditingController(
       text: existingGold == null ? '' : '$existingGold',
+    );
+    final helpCostController = TextEditingController(
+      text: existingHelp == null ? '' : '$existingHelp',
     );
     var selected = await MathTasksService.fetchFolderKidIds(folderId);
     selected = List<String>.from(selected);
@@ -256,7 +262,10 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModal) {
-          final effective = MathTasksService.effectiveGoldPerTask(folderId, folderById);
+          final effectiveGold =
+              MathTasksService.effectiveGoldPerTask(folderId, folderById);
+          final effectiveHelp =
+              MathTasksService.effectiveMathHelpGoldCost(folderId, folderById);
           return AlertDialog(
             title: Text('Indstillinger: $title'),
             content: SizedBox(
@@ -267,8 +276,8 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Guldmønter pr. rigtig opgave (ved Afslut på barnets skærm). '
-                      'Tom felt = arve fra overmappe (eller 1 i rod uden værdi).',
+                      'Uden matematikhjælp får barnet det fulde beløb pr. rigtig opgave '
+                      '(ved Afslut). Har det brugt hjælp på opgaven, trækkes «omkostning».',
                       style: Theme.of(ctx).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 8),
@@ -276,10 +285,26 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
                       controller: goldController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: 'Egne guldmønter (valgfrit)',
-                        hintText: 'Nuværende effekt: $effective',
+                        labelText: 'Guld uden hjælp (pr. opgave, valgfrit)',
+                        hintText: 'Standard / nuværende effekt: $effectiveGold',
                         border: const OutlineInputBorder(),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: helpCostController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Fradrag ved matematikhjælp (valgfrit)',
+                        hintText: 'Standard / nuværende effekt: $effectiveHelp',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Foreslået: 2 guld uden hjælp, 1 i fradrag med hjælp (netto 1). '
+                      'Tom felt på en mappe = arv fra overmappe (rod: 2 og 1).',
+                      style: Theme.of(ctx).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 16),
                     Text('Børn der må se denne mappe (og undermapper):',
@@ -322,13 +347,27 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
     if (gRaw.isNotEmpty && gVal == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ugyldigt tal for guldmønter')),
+          const SnackBar(content: Text('Ugyldigt tal for guld uden hjælp')),
+        );
+      }
+      return;
+    }
+    final hRaw = helpCostController.text.trim();
+    final hVal = hRaw.isEmpty ? null : int.tryParse(hRaw);
+    if (hRaw.isNotEmpty && hVal == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ugyldigt tal for hjælp-fradrag')),
         );
       }
       return;
     }
     try {
-      await MathTasksService.updateFolderGold(folderId: folderId, goldCoinsPerTask: gVal);
+      await MathTasksService.updateFolderGold(
+        folderId: folderId,
+        goldCoinsPerTask: gVal,
+        mathHelpGoldCost: hVal,
+      );
       await MathTasksService.setFolderKids(folderId: folderId, kidIds: selected);
       await _load();
       if (mounted) {

@@ -4,21 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'kid_layout_constants.dart';
+import 'kid_today_hit_regions.dart';
 import 'widgets/kid_gold_treasury_corner.dart';
 import 'widgets/kid_session_nav_button.dart';
 
-/// Trykflader oven på [baggrund.svg] (0–1 af skærm): justér ved visuel test mod illustrationen.
-const double _owlLibraryLeft = 0.02;
-const double _owlLibraryTop = 0.08;
-const double _owlLibraryW = 0.30;
-const double _owlLibraryH = 0.44;
-
-const double _birdMathLeft = 0.33;
-const double _birdMathTop = 0.48;
-const double _birdMathW = 0.34;
-const double _birdMathH = 0.36;
-
-/// Barnets hjem – [baggrund.svg], to zoner (opgaver / spil), kiste → Alfamons.
+/// Barnets hjem – [baggrund.svg]. Trykflader: [KidTodayHitRegions] i design-rum 1200×895.
 class KidTodayScreen extends StatefulWidget {
   const KidTodayScreen({super.key, required this.kidId});
 
@@ -53,6 +43,21 @@ class _KidTodayScreenState extends State<KidTodayScreen> {
     }
   }
 
+  static Widget _region(
+    Rect designRect,
+    Size screenSize,
+    Widget child,
+  ) {
+    final r = kidTodayMapDesignRectToScreen(designRect, screenSize);
+    return Positioned(
+      left: r.left,
+      top: r.top,
+      width: r.width,
+      height: r.height,
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -72,24 +77,19 @@ class _KidTodayScreenState extends State<KidTodayScreen> {
               fit: BoxFit.cover,
             ),
           ),
-          // Venstre: bjørn m.m. – ingen destination lige nu (ugle/fugl ligger ovenpå).
-          Positioned(
-            left: 0,
-            top: size.height * 0.06,
-            width: size.width * 0.5,
-            height: size.height * 0.78,
-            child: GestureDetector(
+          _region(
+            KidTodayHitRegions.trace,
+            size,
+            GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () {},
+              onTap: () => context.push('/trace'),
+              child: const SizedBox.expand(),
             ),
           ),
-          // Zone: spil / kort (højre)
-          Positioned(
-            right: 0,
-            top: size.height * 0.06,
-            width: size.width * 0.5,
-            height: size.height * 0.78,
-            child: Material(
+          _region(
+            KidTodayHitRegions.spil,
+            size,
+            Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: () async {
@@ -98,16 +98,14 @@ class _KidTodayScreenState extends State<KidTodayScreen> {
                 },
                 splashColor: Colors.white24,
                 highlightColor: Colors.white10,
+                child: const SizedBox.expand(),
               ),
             ),
           ),
-          // Ugle → bibliotek; fugl → matematik (oven på venstre/højre zoner).
-          Positioned(
-            left: size.width * _owlLibraryLeft,
-            top: size.height * _owlLibraryTop,
-            width: size.width * _owlLibraryW,
-            height: size.height * _owlLibraryH,
-            child: Material(
+          _region(
+            KidTodayHitRegions.library,
+            size,
+            Material(
               color: Colors.transparent,
               child: InkWell(
                 splashColor: Colors.white24,
@@ -120,12 +118,10 @@ class _KidTodayScreenState extends State<KidTodayScreen> {
               ),
             ),
           ),
-          Positioned(
-            left: size.width * _birdMathLeft,
-            top: size.height * _birdMathTop,
-            width: size.width * _birdMathW,
-            height: size.height * _birdMathH,
-            child: Material(
+          _region(
+            KidTodayHitRegions.math,
+            size,
+            Material(
               color: Colors.transparent,
               child: InkWell(
                 splashColor: Colors.white24,

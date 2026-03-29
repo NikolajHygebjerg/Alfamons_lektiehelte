@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:alfamon_trace/alfamon_trace.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide ChangeNotifierProvider;
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,6 +57,8 @@ bool _startupKidStayLoggedIn = true;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final traceProgressStorage = await initAlfamonTraceModule();
+
   if (!kIsWeb) {
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -85,7 +90,14 @@ void main() async {
   }
   KidTurnNotificationService.init(_navigatorKey);
   await NotificationService.init();
-  runApp(AlfamonApp(authProvider: authProvider));
+  runApp(
+    ProviderScope(
+      overrides: [
+        progressStorageProvider.overrideWithValue(traceProgressStorage),
+      ],
+      child: AlfamonApp(authProvider: authProvider),
+    ),
+  );
 }
 
 class AlfamonApp extends StatelessWidget {
@@ -142,7 +154,9 @@ GoRouter _router(AuthProvider authProvider) => GoRouter(
 
         KidTurnNotificationService.updateCurrentRoute(path);
 
-        if (path == '/auth' || path.startsWith('/admin')) {
+        if (path == '/auth' ||
+            path.startsWith('/admin') ||
+            path.startsWith('/trace')) {
           KidInvitationService.stop();
           KidTurnNotificationService.stop();
         } else if (path.startsWith('/kid/') && path != '/kid/select' && kidId != null) {
@@ -176,6 +190,10 @@ GoRouter _router(AuthProvider authProvider) => GoRouter(
     GoRoute(
       path: '/',
       builder: (_, __) => const HomeScreen(),
+    ),
+    GoRoute(
+      path: '/trace',
+      builder: (_, __) => const TraceRouteScreen(),
     ),
     GoRoute(
       path: '/admin',

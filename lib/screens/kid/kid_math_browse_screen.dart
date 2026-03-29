@@ -72,9 +72,14 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
       if (widget.folderId != null) {
         playN = await _taskCountInFolder(widget.folderId!);
         if (playN > 0) {
+          final rate = MathTasksService.effectiveGoldPerTask(
+            widget.folderId!,
+            folderById,
+          );
           final prog = await MathTasksService.fetchProgress(
             kidId: widget.kidId,
             folderId: widget.folderId!,
+            legacyTasksTimesRate: rate,
           );
           nextIdx = prog.nextIndex;
         }
@@ -165,7 +170,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
   Widget _background() {
     return Positioned.fill(
       child: Image.asset(
-        'assets/baggrund_matematik.png',
+        'assets/baggrund_matematik2.png',
         fit: BoxFit.cover,
         filterQuality: FilterQuality.medium,
         errorBuilder: (_, _, _) => Container(
@@ -392,12 +397,12 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
                                                 horizontal: 24,
                                               ),
                                               child: Text(
-                                                'Vælg opgave i bunden',
+                                                'Åbn en mappe nedenfor.',
                                                 textAlign: TextAlign.center,
                                                 style: TextStyle(
                                                   fontSize: 22,
                                                   fontWeight: FontWeight.w700,
-                                                  color: Color(0xFF2C2C2C),
+                                                  color: Colors.black,
                                                   height: 1.25,
                                                 ),
                                               ),
@@ -423,22 +428,22 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
                                         ),
                                       if (_folders.isNotEmpty && widget.folderId != null)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 24, left: 8, right: 8),
+                                          padding: const EdgeInsets.only(
+                                            top: 24,
+                                            left: 8,
+                                            right: 8,
+                                          ),
                                           child: Text(
                                             _playTaskCount > 0
                                                 ? 'Åbn en mappe nedenfor – eller tryk Spil for opgaver i denne mappe.'
                                                 : 'Åbn en mappe nedenfor.',
                                             textAlign: TextAlign.center,
-                                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                                  color: Colors.white,
-                                                  shadows: const [
-                                                    Shadow(
-                                                      offset: Offset(1, 1),
-                                                      blurRadius: 3,
-                                                      color: Colors.black54,
-                                                    ),
-                                                  ],
-                                                ),
+                                            style: const TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.black,
+                                              height: 1.25,
+                                            ),
                                           ),
                                         ),
                                     ],

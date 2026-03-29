@@ -38,6 +38,10 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+    target.build_configurations.each do |config|
+      # Undgå advarsler fra pods der stadig sætter 10.11 (under Xcode’s understøttede område).
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.15'
+    end
     if target.name == 'audio_session'
       target.build_configurations.each do |config|
         config.build_settings['OTHER_CFLAGS'] ||= ['$(inherited)']

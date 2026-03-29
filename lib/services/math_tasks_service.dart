@@ -84,11 +84,14 @@ class MathTasksService {
   static int? _coinsOnFolder(MathFolderRow row) =>
       (row['gold_coins_per_task'] as num?)?.toInt();
 
-  /// Effektiv sats: første ikke-null fra mappen og forældre; ellers [fallbackRoot].
+  static int? _helpCostOnFolder(MathFolderRow row) =>
+      (row['math_help_gold_cost'] as num?)?.toInt();
+
+  /// Effektiv sats uden hjælp: første ikke-null fra mappen og forældre; ellers [fallbackRoot] (standard 2).
   static int effectiveGoldPerTask(
     String folderId,
     Map<String, MathFolderRow> folderById, {
-    int fallbackRoot = 1,
+    int fallbackRoot = 2,
   }) {
     var id = folderId;
     final seen = <String>{};
@@ -105,6 +108,40 @@ class MathTasksService {
     return fallbackRoot;
   }
 
+  /// Effektivt fradrag ved matematikhjælp (arv som [effectiveGoldPerTask]).
+  static int effectiveMathHelpGoldCost(
+    String folderId,
+    Map<String, MathFolderRow> folderById, {
+    int fallbackRoot = 1,
+  }) {
+    var id = folderId;
+    final seen = <String>{};
+    while (id.isNotEmpty && folderById.containsKey(id)) {
+      if (seen.contains(id)) break;
+      seen.add(id);
+      final row = folderById[id]!;
+      final c = _helpCostOnFolder(row);
+      if (c != null) return c.clamp(0, 1 << 30);
+      final p = row['parent_id'] as String?;
+      if (p == null || p.isEmpty) return fallbackRoot;
+      id = p;
+    }
+    return fallbackRoot;
+  }
+
+  /// Guldmønter for én korrekt opgave (klem til 0).
+  static int coinsEarnedForMathTask({
+    required int baseGoldWithoutHelp,
+    required int helpGoldCost,
+    required bool usedMathHelp,
+  }) {
+    final base = baseGoldWithoutHelp < 0 ? 0 : baseGoldWithoutHelp;
+    final cost = helpGoldCost < 0 ? 0 : helpGoldCost;
+    if (!usedMathHelp) return base;
+    final v = base - cost;
+    return v < 0 ? 0 : v;
+  }
+
   static Future<({Map<String, MathFolderRow> folderById, Set<String> assigned})>
       loadKidVisibilityContext(String kidId) async {
     final profileId = await _profileId();
@@ -113,7 +150,9 @@ class MathTasksService {
     }
     final folders = await _client
         .from('math_folders')
-        .select('id,parent_id,title,gold_coins_per_task,sort_order')
+        .select(
+          'id,parent_id,title,gold_coins_per_task,math_help_gold_cost,sort_order',
+        )
         .eq('profile_id', profileId);
     final folderById = <String, MathFolderRow>{};
     for (final e in folders as List) {
@@ -159,7 +198,9 @@ class MathTasksService {
   static Future<List<MathFolderRow>> fetchAllFolders(String profileId) async {
     final res = await _client
         .from('math_folders')
-        .select('id,parent_id,title,gold_coins_per_task,sort_order')
+        .select(
+          'id,parent_id,title,gold_coins_per_task,math_help_gold_cost,sort_order',
+        )
         .eq('profile_id', profileId)
         .order('sort_order')
         .order('title');
@@ -172,7 +213,9 @@ class MathTasksService {
   }) async {
     final res = await _client
         .from('math_folders')
-        .select('id,parent_id,title,gold_coins_per_task,sort_order')
+        .select(
+          'id,parent_id,title,gold_coins_per_task,math_help_gold_cost,sort_order',
+        )
         .eq('profile_id', profileId)
         .order('sort_order')
         .order('title');
@@ -247,9 +290,11 @@ class MathTasksService {
   static Future<void> updateFolderGold({
     required String folderId,
     required int? goldCoinsPerTask,
+    required int? mathHelpGoldCost,
   }) async {
     await _client.from('math_folders').update({
       'gold_coins_per_task': goldCoinsPerTask,
+      'math_help_gold_cost': mathHelpGoldCost,
     }).eq('id', folderId);
   }
 
@@ -304,34 +349,42 @@ class MathTasksService {
     await _client.from('math_tasks').delete().eq('id', taskId);
   }
 
-  static Future<({int nextIndex, int pendingGold})> fetchProgress({
+  /// [legacyTasksTimesRate]: ved ældre rækker med kun [pending_gold_tasks] > 0 og [pending_gold_coins] == 0.
+  static Future<({int nextIndex, int pendingGoldCoins})> fetchProgress({
     required String kidId,
     required String folderId,
+    required int legacyTasksTimesRate,
   }) async {
     final row = await _client
         .from('math_progress')
-        .select('next_task_index,pending_gold_tasks')
+        .select('next_task_index,pending_gold_tasks,pending_gold_coins')
         .eq('kid_id', kidId)
         .eq('folder_id', folderId)
         .maybeSingle();
-    if (row == null) return (nextIndex: 0, pendingGold: 0);
-    return (
-      nextIndex: (row['next_task_index'] as num?)?.toInt() ?? 0,
-      pendingGold: (row['pending_gold_tasks'] as num?)?.toInt() ?? 0,
-    );
+    if (row == null) return (nextIndex: 0, pendingGoldCoins: 0);
+    final nextIndex = (row['next_task_index'] as num?)?.toInt() ?? 0;
+    final storedCoins = (row['pending_gold_coins'] as num?)?.toInt() ?? 0;
+    final legacyTasks = (row['pending_gold_tasks'] as num?)?.toInt() ?? 0;
+    final rate = legacyTasksTimesRate < 1 ? 1 : legacyTasksTimesRate;
+    var pendingGold = storedCoins;
+    if (pendingGold == 0 && legacyTasks > 0) {
+      pendingGold = legacyTasks * rate;
+    }
+    return (nextIndex: nextIndex, pendingGoldCoins: pendingGold);
   }
 
   static Future<void> saveProgress({
     required String kidId,
     required String folderId,
     required int nextTaskIndex,
-    required int pendingGoldTasks,
+    required int pendingGoldCoins,
   }) async {
     await _client.from('math_progress').upsert({
       'kid_id': kidId,
       'folder_id': folderId,
       'next_task_index': nextTaskIndex,
-      'pending_gold_tasks': pendingGoldTasks,
+      'pending_gold_tasks': 0,
+      'pending_gold_coins': pendingGoldCoins,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
   }
@@ -345,28 +398,32 @@ class MathTasksService {
       'folder_id': folderId,
       'next_task_index': 0,
       'pending_gold_tasks': 0,
+      'pending_gold_coins': 0,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
   }
 
-  /// Udbetal [pendingCount] opgaver á [coinsPerTask]; nulstil pending i DB.
+  /// Udbetal [pendingGoldCoins] og nulstil pending i DB.
   static Future<int> settlePendingGold({
     required String kidId,
     required String folderId,
-    required int pendingCount,
-    required int coinsPerTask,
+    required int pendingGoldCoins,
   }) async {
-    if (pendingCount <= 0 || coinsPerTask <= 0) {
-      final prog = await fetchProgress(kidId: kidId, folderId: folderId);
+    if (pendingGoldCoins <= 0) {
+      final prog = await fetchProgress(
+        kidId: kidId,
+        folderId: folderId,
+        legacyTasksTimesRate: 1,
+      );
       await saveProgress(
         kidId: kidId,
         folderId: folderId,
         nextTaskIndex: prog.nextIndex,
-        pendingGoldTasks: 0,
+        pendingGoldCoins: 0,
       );
       return 0;
     }
-    final amount = pendingCount * coinsPerTask;
+    final amount = pendingGoldCoins;
     final row = await _client
         .from('kids')
         .select('gold_coins')
@@ -381,12 +438,16 @@ class MathTasksService {
       'delta_points': amount,
       'balance_after': next,
     });
-    final prog = await fetchProgress(kidId: kidId, folderId: folderId);
+    final prog = await fetchProgress(
+      kidId: kidId,
+      folderId: folderId,
+      legacyTasksTimesRate: 1,
+    );
     await saveProgress(
       kidId: kidId,
       folderId: folderId,
       nextTaskIndex: prog.nextIndex,
-      pendingGoldTasks: 0,
+      pendingGoldCoins: 0,
     );
     return amount;
   }

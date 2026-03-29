@@ -10,6 +10,7 @@ import '../../providers/profile_role_provider.dart';
 import '../../services/parent_code_service.dart';
 import '../../widgets/admin/admin_menu_toolbar_button.dart';
 import '../../widgets/admin/admin_users_settings_section.dart';
+import '../../widgets/tts_setup_intro_dialog.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -485,6 +486,43 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                                 ),
                               )
                             : const Text('Gem forældrekode'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                color: const Color(0xFFF9C433).withValues(alpha: 0.9),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Matematikhjælp',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Oplæsning af hjælpetekst kræver dansk tekst-til-tale (stemme) '
+                        'på enheden.',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.record_voice_over_outlined),
+                        title: const Text('Tale og systemstemmer'),
+                        subtitle: const Text(
+                          'Vejledning og åbn Systemindstillinger (dialog kan blive åben på Mac)',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () =>
+                            TtsSetupIntro.showFromAdminSettings(context),
                       ),
                     ],
                   ),

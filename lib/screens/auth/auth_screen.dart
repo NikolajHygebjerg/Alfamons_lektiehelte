@@ -16,6 +16,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocus = FocusNode();
   bool _isLoading = false;
   bool _isSignUp = false;
   bool _stayLoggedIn = true;
@@ -38,6 +39,7 @@ class _AuthScreenState extends State<AuthScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -134,25 +136,40 @@ class _AuthScreenState extends State<AuthScreen> {
               builder: (context, constraints) {
                 // Design-størrelse tilpasset iPad vs iPhone
                 final designWidth = isTablet ? 450.0 : 360.0;
-                // Layout tilpasset hvert design
-                final topSpacing = isTablet ? 280.0 : 200.0;
                 final textSize = isTablet ? 16.0 : 14.0;
                 final smallTextSize = isTablet ? 14.0 : 13.0;
                 final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-                return Center(
+                final keyboardOpen = bottomInset > 0;
+                // Scaffold med resizeToAvoidBottomInset giver allerede mindre højde — træk
+                // ikke bottomInset fra igen (det pressede formularen væk véd tastaturet).
+                final availableH = constraints.maxHeight;
+                final topSpacing = isTablet
+                    ? (keyboardOpen ? 56.0 : 280.0)
+                    : keyboardOpen
+                        ? 8.0
+                        : (availableH < 560
+                            ? (availableH * 0.1).clamp(32.0, 100.0)
+                            : (availableH < 680 ? 140.0 : 200.0));
+                return Align(
+                  alignment:
+                      keyboardOpen ? Alignment.topCenter : Alignment.center,
                   child: Padding(
-                    padding: EdgeInsets.only(bottom: bottomInset),
-                    child: SizedBox(
-                      width: designWidth,
-                      child: Form(
-                        key: _formKey,
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: isTablet ? 48 : 32),
-                          child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(height: topSpacing),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      clipBehavior: Clip.none,
+                      child: SizedBox(
+                        width: designWidth,
+                        child: Form(
+                          key: _formKey,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: isTablet ? 48 : 32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(height: topSpacing),
                       if (_errorMessage != null)
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -174,6 +191,10 @@ class _AuthScreenState extends State<AuthScreen> {
                         child: TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        scrollPadding: const EdgeInsets.fromLTRB(0, 80, 0, 140),
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_passwordFocus),
                         style: const TextStyle(color: Color(0xFFE8DCC8)),
                         decoration: InputDecoration(
                           labelText: 'Email',
@@ -209,7 +230,13 @@ class _AuthScreenState extends State<AuthScreen> {
                         width: designWidth * 0.65,
                         child: TextFormField(
                         controller: _passwordController,
+                        focusNode: _passwordFocus,
                         obscureText: true,
+                        textInputAction: TextInputAction.done,
+                        scrollPadding: const EdgeInsets.fromLTRB(0, 80, 0, 140),
+                        onFieldSubmitted: (_) {
+                          if (!_isLoading) _submit();
+                        },
                         style: const TextStyle(color: Color(0xFFE8DCC8)),
                         decoration: InputDecoration(
                           labelText: 'Adgangskode',
@@ -323,7 +350,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             style: TextStyle(fontSize: smallTextSize),
                           ),
                         ),
-                          ],
+                      SizedBox(height: keyboardOpen ? 40 : 12),
+                              ],
+                            ),
                           ),
                         ),
                       ),

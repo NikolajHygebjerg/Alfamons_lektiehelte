@@ -1,0 +1,31 @@
+name: alfamon_trace
+description: Bogstav-tracing til Alfamon-universet (tablet-først, offline Hive, Riverpod).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.2.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  svg_path_parser: ^1.1.2
+  vector_math: ^2.1.4
+  just_audio: ^0.9.40
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - Assets/
+    # Eksplicit så gitter-filer i undermappen altid med (plus Assets/ rekurserer alligevel).
+    - Assets/bogstaver/

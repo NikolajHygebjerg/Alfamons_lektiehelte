@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/profile_role_provider.dart';
 import '../../widgets/parent_code_first_setup_dialog.dart';
 import '../../widgets/admin/admin_menu_toolbar_button.dart';
+import '../../widgets/tts_setup_intro_dialog.dart';
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
@@ -16,10 +17,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       context.read<ProfileRoleProvider>().refresh();
-      ParentCodeFirstSetupDialog.showIfNeeded(context);
+      await ParentCodeFirstSetupDialog.showIfNeeded(context);
+      if (!mounted) return;
+      await TtsSetupIntro.showIfNeededForAdmin(context);
     });
   }
 
