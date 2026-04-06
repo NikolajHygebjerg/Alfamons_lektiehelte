@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/task.dart';
 import '../../utils/kid_task_instances.dart';
 import '../../utils/recurring_task_schedule.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/kid_session_nav_button.dart';
 
 class KidWeekScreen extends StatefulWidget {
@@ -152,6 +153,11 @@ class _KidWeekScreenState extends State<KidWeekScreen> {
             top: MediaQuery.paddingOf(context).top + 8,
             left: 8,
             child: KidSessionNavButton(kidId: widget.kidId),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: 8,
+            child: const KidParentAdminCornerButton(),
           ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -43,6 +44,7 @@ class _PendingChallengeHandlerState extends State<PendingChallengeHandler>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kIsWeb) return;
     if (state == AppLifecycleState.resumed) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await KidInvitationService.refreshPendingForCurrentKid();
@@ -52,6 +54,7 @@ class _PendingChallengeHandlerState extends State<PendingChallengeHandler>
   }
 
   Future<void> _checkPending() async {
+    if (kIsWeb) return;
     if (_handlingPending || !mounted) return;
     final pending = NotificationService.peekPendingChallenge();
     if (pending == null) return;

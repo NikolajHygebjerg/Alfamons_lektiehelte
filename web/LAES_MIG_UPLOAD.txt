@@ -1,0 +1,19 @@
+VIGTIGT — undgå hvid skærm
+==========================
+
+Upload IKKE kun denne kilde-mappe (web/) til serveren.
+
+1) Fra projekroden kør (slank admin uden ~400MB spil-assets):
+   ./tool/build_web_admin.sh
+   Alternativt fuld build: flutter build web --release
+
+2) Upload HELE indholdet af mappen:
+   build/web/
+   (ikke projektets web/)
+
+Der skal bl.a. ligge: main.dart.js, flutter.js, flutter_bootstrap.js, assets/, canvaskit/
+
+App i undermappe (fx ditdomæne.dk/alfamon/):
+   flutter build web --release --base-href /alfamon/
+
+Konfigurer også SPA-fallback til index.html på serveren (se docs/flutter-web-deploy.md).

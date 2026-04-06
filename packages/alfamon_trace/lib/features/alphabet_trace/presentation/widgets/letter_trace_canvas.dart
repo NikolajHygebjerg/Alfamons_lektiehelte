@@ -151,6 +151,16 @@ class _LetterTraceCanvasState extends ConsumerState<LetterTraceCanvas> {
   Future<void> _onLetterCompleted(Letter letter) async {
     ref.read(drawingMusicProvider).stop();
     ref.read(progressProvider.notifier).markCompleted(letter.id);
+    final awarded =
+        ref.read(traceSessionAwardedLetterIdsProvider);
+    if (!awarded.contains(letter.id)) {
+      ref.read(traceSessionAwardedLetterIdsProvider.notifier).state = {
+        ...awarded,
+        letter.id,
+      };
+      ref.read(traceSessionCoinsEarnedProvider.notifier).state =
+          ref.read(traceSessionCoinsEarnedProvider) + 1;
+    }
     final tale2Path = letter.alfamonTale2Path;
     if (tale2Path != null && tale2Path.isNotEmpty) {
       await ref.read(oneShotAudioProvider).playAndWait(tale2Path);

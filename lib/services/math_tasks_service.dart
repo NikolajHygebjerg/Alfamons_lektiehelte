@@ -3,6 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 typedef MathFolderRow = Map<String, dynamic>;
 typedef MathTaskRow = Map<String, dynamic>;
 
+/// Standard rode-mappenavne (oprettes automatisk i admin). Rækkefølge = visning hos barnet.
+const List<String> kDefaultMathRootFolderTitles = [
+  'Plus',
+  'Minus',
+  'Dividere',
+  'Gange',
+];
+
 /// Supabase: [math_folders], [math_tasks], [math_folder_kids], [math_progress].
 class MathTasksService {
   MathTasksService._();
@@ -207,6 +215,67 @@ class MathTasksService {
     return (res as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Ikon til barnets underste strimmel når mappen er en standardrod med præcis titel.
+  static String? kidIconAssetForMathFolderTitle(String title) {
+    switch (title.trim()) {
+      case 'Plus':
+        return 'assets/Plus.png';
+      case 'Minus':
+        return 'assets/Minus.png';
+      case 'Dividere':
+        return 'assets/Dividere.png';
+      case 'Gange':
+        return 'assets/Gange.png';
+      default:
+        return null;
+    }
+  }
+
+  /// Plus → Minus → Dividere → Gange først, derefter øvrige rodmappede uændret.
+  static List<MathFolderRow> orderedVisibleRootFolders(
+    List<MathFolderRow> folders,
+  ) {
+    if (folders.isEmpty) return folders;
+    final inList = List<MathFolderRow>.from(folders);
+    final byTitle = <String, MathFolderRow>{
+      for (final f in inList)
+        ((f['title'] as String?) ?? '').trim(): f,
+    };
+    final out = <MathFolderRow>[];
+    for (final t in kDefaultMathRootFolderTitles) {
+      final f = byTitle[t];
+      if (f != null) out.add(f);
+    }
+    for (final f in inList) {
+      final t = ((f['title'] as String?) ?? '').trim();
+      if (!kDefaultMathRootFolderTitles.contains(t)) {
+        out.add(f);
+      }
+    }
+    return out;
+  }
+
+  /// Opretter manglende standard rode-mapper (sletter/ændrer ikke eksisterende).
+  static Future<void> ensureDefaultMathRootFolders(String profileId) async {
+    final existing = await fetchChildFolders(
+      profileId: profileId,
+      parentId: null,
+    );
+    final have = existing
+        .map((f) => ((f['title'] as String?) ?? '').trim())
+        .toSet();
+    for (var i = 0; i < kDefaultMathRootFolderTitles.length; i++) {
+      final title = kDefaultMathRootFolderTitles[i];
+      if (have.contains(title)) continue;
+      await _client.from('math_folders').insert({
+        'profile_id': profileId,
+        'parent_id': null,
+        'title': title,
+        'sort_order': i,
+      });
+    }
+  }
+
   static Future<List<MathFolderRow>> fetchChildFolders({
     required String profileId,
     required String? parentId,
@@ -347,6 +416,11 @@ class MathTasksService {
 
   static Future<void> deleteTask(String taskId) async {
     await _client.from('math_tasks').delete().eq('id', taskId);
+  }
+
+  /// Sletter alle opgaver i mappen (ikke undermapper eller selve mappen).
+  static Future<void> deleteAllTasksInFolder(String folderId) async {
+    await _client.from('math_tasks').delete().eq('folder_id', folderId);
   }
 
   /// [legacyTasksTimesRate]: ved ældre rækker med kun [pending_gold_tasks] > 0 og [pending_gold_coins] == 0.

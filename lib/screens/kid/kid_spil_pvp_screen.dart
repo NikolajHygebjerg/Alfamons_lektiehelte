@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/spil_card_service.dart';
 import '../../utils/card_assets.dart';
 import '../../widgets/duel_angreb_tile.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/alfamon_card.dart';
 import 'widgets/kid_session_nav_button.dart';
 
@@ -686,7 +687,7 @@ class _KidSpilPvpScreenState extends State<KidSpilPvpScreen> {
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(width: 48),
+                      const KidParentAdminCornerButton(),
                     ],
                   ),
                 ),

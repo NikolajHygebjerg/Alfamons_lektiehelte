@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/kid.dart';
+import '../../providers/auth_provider.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 
 class KidSelectScreen extends StatefulWidget {
   const KidSelectScreen({super.key});
@@ -67,12 +71,13 @@ class _KidSelectScreenState extends State<KidSelectScreen> {
     });
   }
 
-  /// Tilbage til startsiden (vælg admin/barn) – rydder gemt barn-session.
-  Future<void> _logOutToRolePicker() async {
+  /// Log ud af appen og ryd gemt barn-session.
+  Future<void> _logOutOfApp() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('kidId');
+    await prefs.remove('kidStayLoggedIn');
     if (!mounted) return;
-    context.go('/');
+    await context.read<AuthProvider>().signOut();
   }
 
   Future<void> _selectKid(Kid kid) async {
@@ -163,25 +168,31 @@ class _KidSelectScreenState extends State<KidSelectScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _logOutToRolePicker,
-                      icon: const Icon(Icons.logout, color: Colors.white, size: 22),
-                      label: const Text(
-                        'Log ud',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
+                  child: Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: _logOutOfApp,
+                        icon: const Icon(Icons.logout, color: Colors.white, size: 22),
+                        label: const Text(
+                          'Log ud',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.black.withValues(alpha: 0.25),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                         ),
                       ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.black.withValues(alpha: 0.25),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      ),
-                    ),
+                      const Spacer(),
+                      const KidParentAdminCornerButton(),
+                    ],
                   ),
                 ),
                 Expanded(
@@ -192,7 +203,8 @@ class _KidSelectScreenState extends State<KidSelectScreen> {
                               child: Padding(
                                 padding: const EdgeInsets.all(32),
                                 child: Text(
-                                  'Ingen børn tilføjet. Gå til Admin for at tilføje.',
+                                  'Ingen børn tilføjet. Tryk på voksen-ikonet øverst til '
+                                  'højre og indtast forældrekoden for at tilføje børn.',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,

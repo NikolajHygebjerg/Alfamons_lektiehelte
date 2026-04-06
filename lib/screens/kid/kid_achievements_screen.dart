@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/kid_session_nav_button.dart';
 
 const _achievementDefinitions = {
@@ -308,6 +309,11 @@ class _KidAchievementsScreenState extends State<KidAchievementsScreen> {
             top: MediaQuery.paddingOf(context).top + 8,
             left: 8,
             child: KidSessionNavButton(kidId: widget.kidId),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: 8,
+            child: const KidParentAdminCornerButton(),
           ),
         ],
       ),

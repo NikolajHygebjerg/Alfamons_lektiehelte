@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../widgets/kid_parent_admin_corner.dart';
+
 /// Bøger i én bibliotekgruppe (når barnet har > 6 bøger og forælder har oprettet grupper).
 class KidLibraryGroupScreen extends StatefulWidget {
   const KidLibraryGroupScreen({
@@ -121,6 +123,14 @@ class _KidLibraryGroupScreenState extends State<KidLibraryGroupScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(_groupName ?? 'Gruppe'),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Center(
+              child: KidParentAdminCornerButton(size: 40),
+            ),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(

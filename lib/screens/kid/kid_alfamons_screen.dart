@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/alfamon_evolution.dart';
 import '../../services/task_completion_service.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/alfamon_evolution_progress_bar.dart';
 import 'widgets/kid_session_nav_button.dart';
 
@@ -90,7 +91,12 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
         .select('value')
         .eq('key', 'alphamon_unlock_code')
         .maybeSingle();
-    final code = settingsRes?['value'] as String? ?? '0881';
+    final rawCode = settingsRes?['value'];
+    final code = rawCode == null
+        ? '0881'
+        : rawCode is String
+            ? rawCode.trim()
+            : rawCode.toString().trim();
 
     final unlockedRes = await client
         .from('kid_unlocked_alphamons')
@@ -250,74 +256,141 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
     }
   }
 
+  String _unlockFailureMessage(Object error) {
+    if (error is PostgrestException) {
+      final msg = error.message;
+      final lower = msg.toLowerCase();
+      if (error.code == '23505' ||
+          lower.contains('duplicate') ||
+          lower.contains('unique')) {
+        return 'Allerede låst op!';
+      }
+      if (lower.contains('jwt') ||
+          lower.contains('permission denied') ||
+          lower.contains('row-level security') ||
+          lower.contains('policy') ||
+          error.code == '42501') {
+        return 'Ingen adgang. Prøv igen, eller log ind som forælder.';
+      }
+      if (lower.contains('more than one') || lower.contains('multiple')) {
+        return 'Flere Alfamons har samme bogstav i databasen. Kontakt support.';
+      }
+      return msg;
+    }
+    return 'Noget gik galt. Tjek forbindelsen og prøv igen.';
+  }
+
+  /// Ét avatar-række pr. bogstav; [limit(1)] undgår at [maybeSingle] fejler ved dubletter.
+  Future<Map<String, dynamic>?> _avatarByLetter(String letter) async {
+    final client = Supabase.instance.client;
+    final variants = <String>{
+      letter,
+      letter.toLowerCase(),
+      letter.toUpperCase(),
+    };
+    for (final v in variants) {
+      if (v.isEmpty) continue;
+      final rows = await client
+          .from('avatars')
+          .select('id,name')
+          .eq('letter', v)
+          .limit(1);
+      final list = rows as List;
+      if (list.isNotEmpty) {
+        return Map<String, dynamic>.from(list.first as Map);
+      }
+    }
+    return null;
+  }
+
   Future<void> _unlock() async {
     final letter = _selectedLetter;
-    if (letter == null || _unlockCode == null) return;
-    if (_codeController.text.trim() != _unlockCode) {
+    if (letter == null) return;
+
+    final expected = (_unlockCode ?? '').trim();
+    if (expected.isEmpty) {
+      setState(
+        () => _error =
+            'Oplåsningskode mangler. Luk vinduet og åbn Alfamons igen.',
+      );
+      return;
+    }
+    if (_codeController.text.trim() != expected) {
       setState(() => _error = 'Forkert kode! Prøv igen.');
       return;
     }
+
     setState(() {
       _unlocking = true;
       _error = null;
     });
-    final client = Supabase.instance.client;
-    final avRes = await client
-        .from('avatars')
-        .select('id,name')
-        .eq('letter', letter)
-        .maybeSingle();
-    if (avRes == null) {
-      setState(() {
-        _error = 'Ingen alphamon fundet.';
-        _unlocking = false;
+
+    try {
+      final client = Supabase.instance.client;
+      final avRow = await _avatarByLetter(letter);
+      if (avRow == null) {
+        if (mounted) {
+          setState(() {
+            _error = 'Ingen Alfamon fundet for dette bogstav.';
+            _unlocking = false;
+          });
+        }
+        return;
+      }
+      final avatarId = avRow['id'] as String;
+      final existing = await client
+          .from('kid_unlocked_alphamons')
+          .select('id')
+          .eq('kid_id', widget.kidId)
+          .eq('avatar_id', avatarId)
+          .limit(1);
+      if ((existing as List).isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _error = 'Allerede låst op!';
+            _unlocking = false;
+          });
+        }
+        return;
+      }
+      await client.from('kid_unlocked_alphamons').insert({
+        'kid_id': widget.kidId,
+        'avatar_id': avatarId,
       });
-      return;
-    }
-    final avatarId = avRes['id'] as String;
-    final existing = await client
-        .from('kid_unlocked_alphamons')
-        .select('id')
-        .eq('kid_id', widget.kidId)
-        .eq('avatar_id', avatarId)
-        .maybeSingle();
-    if (existing != null) {
-      setState(() {
-        _error = 'Allerede låst op!';
-        _unlocking = false;
+      final stagesRes = await client
+          .from('avatar_stages')
+          .select('stage_index')
+          .eq('avatar_id', avatarId)
+          .order('stage_index')
+          .limit(1);
+      final initialStage = (stagesRes as List).isNotEmpty
+          ? (stagesRes.first['stage_index'] as int)
+          : 0;
+      await client.from('kid_avatar_library').insert({
+        'kid_id': widget.kidId,
+        'avatar_id': avatarId,
+        'current_stage_index': initialStage,
+        'points_current': 0,
       });
-      return;
-    }
-    await client.from('kid_unlocked_alphamons').insert({
-      'kid_id': widget.kidId,
-      'avatar_id': avatarId,
-    });
-    final stagesRes = await client
-        .from('avatar_stages')
-        .select('stage_index')
-        .eq('avatar_id', avatarId)
-        .order('stage_index')
-        .limit(1);
-    final initialStage = (stagesRes as List).isNotEmpty
-        ? (stagesRes.first['stage_index'] as int)
-        : 0;
-    await client.from('kid_avatar_library').insert({
-      'kid_id': widget.kidId,
-      'avatar_id': avatarId,
-      'current_stage_index': initialStage,
-      'points_current': 0,
-    });
-    await _load();
-    if (mounted) {
+      await _load();
+      if (!mounted) return;
       setState(() {
         _unlocking = false;
         _showCodeModal = false;
         _selectedLetter = null;
         _codeController.clear();
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Alfamon låst op!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alfamon låst op!')),
+      );
+    } catch (e, st) {
+      debugPrint('KidAlfamonsScreen._unlock: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _unlocking = false;
+          _error = _unlockFailureMessage(e);
+        });
+      }
     }
   }
 
@@ -326,6 +399,7 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
       _showCodeModal = false;
       _selectedLetter = null;
       _error = null;
+      _unlocking = false;
       _codeController.clear();
     });
   }
@@ -623,6 +697,11 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
             left: 8,
             child: KidSessionNavButton(kidId: widget.kidId),
           ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: 8,
+            child: const KidParentAdminCornerButton(),
+          ),
           if (_showCodeModal && _selectedLetter != null) _buildCodeModal(),
         ],
       ),
@@ -663,7 +742,7 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Lås alphamon op!',
+                    'Lås Alfamon op!',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
@@ -1030,7 +1109,7 @@ class _AlfamonUpgradeSheetState extends State<_AlfamonUpgradeSheet> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Image.asset(
-                    'assets/moent.png',
+                    'assets/moent.webp',
                     width: 52,
                     height: 52,
                     fit: BoxFit.contain,

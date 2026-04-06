@@ -4,18 +4,30 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/audio_cache_service.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'kid_layout_constants.dart';
 import 'widgets/kid_session_nav_button.dart';
 import 'widgets/library_cabinet_background.dart';
+
+/// Indtalt velkomst når barnet åbner biblioteket — læg filen i `assets/`.
+const String kidLibraryIntroAsset = 'assets/dette_er_biblioteket.mp3';
 
 /// Bibliotek – tegnet bogskab (hylder i kode), bøger på hylder.
 class KidLibraryScreen extends StatefulWidget {
   final String kidId;
 
-  const KidLibraryScreen({super.key, required this.kidId});
+  /// Når barnet kommer fra hjemskærmen, afspilles intro allerede ved tryk — undgå dobbelt lyd.
+  final bool skipIntroOnOpen;
+
+  const KidLibraryScreen({
+    super.key,
+    required this.kidId,
+    this.skipIntroOnOpen = false,
+  });
 
   @override
   State<KidLibraryScreen> createState() => _KidLibraryScreenState();
@@ -27,12 +39,38 @@ class _KidLibraryScreenState extends State<KidLibraryScreen> {
   /// Rækkefølge på hylderne: bog-map eller gruppe-tile `{'_kind':'group','id','name'}`.
   List<Map<String, dynamic>> _shelfItems = [];
   bool _loading = true;
+  final AudioPlayer _libraryIntroPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
     _loadBooks();
     unawaited(AudioCacheService.syncAll());
+    if (!widget.skipIntroOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_playLibraryIntro());
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_libraryIntroPlayer.dispose());
+    super.dispose();
+  }
+
+  Future<void> _playLibraryIntro() async {
+    if (!mounted) return;
+    try {
+      await _libraryIntroPlayer.stop();
+      await _libraryIntroPlayer.setAudioSource(
+        AudioSource.asset(kidLibraryIntroAsset),
+        preload: true,
+      );
+      await _libraryIntroPlayer.play();
+    } catch (e, st) {
+      debugPrint('KidLibraryScreen: kunne ikke afspille $kidLibraryIntroAsset: $e\n$st');
+    }
   }
 
   Future<void> _loadBooks() async {
@@ -369,6 +407,11 @@ class _KidLibraryScreenState extends State<KidLibraryScreen> {
             top: MediaQuery.paddingOf(context).top + 8,
             left: kidZoneHorizontalPadding,
             child: KidSessionNavButton(kidId: widget.kidId),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: kidZoneHorizontalPadding,
+            child: const KidParentAdminCornerButton(),
           ),
         ],
       ),

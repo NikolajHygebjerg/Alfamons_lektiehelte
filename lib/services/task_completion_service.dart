@@ -40,6 +40,16 @@ class TaskCompletionService {
     return next;
   }
 
+  /// Guldmønter for nye gennemførte bogstaver i Alfamon Trace (ét pr. bogstav).
+  /// Bruger [ledgerSource] `gold_earn` (samme som øvrige barn-gevinst uden opgave-række).
+  static Future<int> addAlphabetTraceGold(String kidId, int letterCount) async {
+    return _addGoldToTreasury(
+      kidId,
+      letterCount,
+      ledgerSource: 'gold_earn',
+    );
+  }
+
   static Future<int?> _maybeAwardDailyBonusGold(String kidId) async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
     final todayInstances = await _client

@@ -122,6 +122,14 @@ final musicMutedProvider = StateProvider<bool>((ref) => false);
 /// True after first visit to letter screen (for Velkommentale vs bogstavmusik).
 final hasVisitedLetterScreenProvider = StateProvider<bool>((ref) => false);
 
+/// Optjente guldmønter i den aktuelle trace-session (synk til kiste når barnet forlader Trace).
+final traceSessionCoinsEarnedProvider = StateProvider<int>((ref) => 0);
+
+/// Bogstav-id'er der allerede har givet én mønt i **denne** trace-session.
+/// ([setProgress] kan ramme 100% før [markCompleted], så "var bogstavet færdigt før?" er upålidelig.)
+final traceSessionAwardedLetterIdsProvider =
+    StateProvider<Set<String>>((ref) => {});
+
 /// Letter screen music (bogstavmusik.mp3 or Velkommentale.mp3) on the letter grid.
 final letterScreenMusicProvider = Provider<LetterScreenMusicService>((ref) {
   final service = LetterScreenMusicService();

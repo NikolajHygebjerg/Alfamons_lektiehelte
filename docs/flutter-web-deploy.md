@@ -2,17 +2,29 @@
 
 Denne guide forudsætter, at backend allerede er Supabase (som i projektet), og at du har et domæne med HTTPS.
 
-## 1. Byg web-versionen
+## 1. Byg web-versionen (forælder-admin, slank)
 
-Fra projektroden:
+Standard **`flutter build web`** bruger **`pubspec.yaml`**, som lister **`assets/`** og **`alfamon_trace`**. Flutter pakker **alle** de filer ind i **`build/web/assets/`** (ofte ~300–400 MB), selv om **web kun kører admin** — det er forventet opførsel.
+
+**Anbefalet:** byg den lette admin-uden-spil-assets-version:
 
 ```bash
 cd alfamon_flutter
+./tool/build_web_admin.sh
+```
+
+(vælger midlertidigt **`pubspec_web.yaml`**: ingen rod-`assets/`, ingen `alfamon_trace`-pakke → langt mindre `build/web/assets/`.)
+
+Ved manuel build med fuld app (fx til test):
+
+```bash
 flutter pub get
 flutter build web --release
 ```
 
-Resultatet ligger i **`build/web/`**. Det er **statiske filer** (HTML, JS, CSS, assets) – du skal kun uploade/hoste den mappe (eller dens indhold).
+Resultatet ligger i **`build/web/`**. Det er **statiske filer** (HTML, JS, CSS, evt. assets) – upload **hele** mappens indhold.
+
+**Vedligeholdelse:** når du tilføjer nye **`dependencies`** i **`pubspec.yaml`**, skal typisk **`pubspec_web.yaml`** opdateres tilsvarende (kopier blokken og fjern stadig `alfamon_trace` og `assets`).
 
 ### App i en undermappe (fx `www.eksempel.dk/alfamon/`)
 
@@ -23,6 +35,15 @@ flutter build web --release --base-href /alfamon/
 ```
 
 (Tallet/mappen skal matche præcis den URL-sti, brugerne åbner appen på.)
+
+## Hvid skærm efter upload — typiske årsager
+
+1. **Forkert mappe** — Du har uploadet projektets `web/`-mappe (kilde med kun `index.html` + ikoner). Den indeholder **ikke** den kompilerede app (`main.dart.js`, `flutter.js`, `assets/`, `canvaskit/` m.m.).  
+   **Løsning:** Kør `flutter build web --release` og upload **alt indhold af `build/web/`**.
+
+2. **404 på scripts** — Åbn **Udviklerværktøj (F12) → Network** og genindlæs. Hvis `main.dart.js` eller `flutter_bootstrap.js` er røde (404), er filerne ikke uploadet eller **`base href`** passer ikke til din URL (fx app i undermappe uden `--base-href /undermappe/`).
+
+3. **Ingen SPA-fallback** — Direkte adgang til `/admin` eller refresh kan give tom side hvis serveren ikke sender `index.html` for ukendte stier. Se afsnit 2 nedenfor.
 
 ## 2. Hvad serveren skal kunne (SPA)
 

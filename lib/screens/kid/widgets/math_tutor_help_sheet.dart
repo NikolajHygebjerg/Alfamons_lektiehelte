@@ -152,12 +152,18 @@ Future<bool?> showMathTutorHelpSheet(
 
 enum _TutorPhase {
   intro,
+  /// Minus med lån: mønt-trin 0 = oprindelige tal, 1 = efter veksling (under oplæsning).
+  minusBorrowWalk,
+  /// Minus med lån efter korrekt ener-svar: tier gennemstreget → tier-minus (før subTens).
+  minusBorrowTensWalk,
   /// Plus med mente: enere i alt → mente-klip + skærm → tiere i alt → afslutning.
   addOnesSum,
   /// Kun visning under mente-klip (ingen input); derefter automatisk [addTensCount].
   addOnesDigit,
   addTensCount,
   addResultPraise,
+  /// Minus: hele stykket med svar + ros efter korrekt tier-svar (med eller uden lån).
+  minusBorrowFinalResult,
   /// Minus: tier i svar → ener i svar (uændret idé).
   subTens,
   subOnes,
@@ -207,6 +213,16 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
   final AudioPlayer _assetClipPlayer = AudioPlayer();
 
   _TutorPhase _phase = _TutorPhase.intro;
+  /// Minus: om vi brugte låne-mellemskridt (til korrekt tier-oplæsning bagefter).
+  bool _minusUsedBorrow = false;
+  /// 0 = To møntrækker (a, b); 1 = splittet minuend + andet tal.
+  int _minusBorrowCoinStep = 0;
+  /// Minus uden lån (subTens): antal **tier**-par fjernet ved tryk (fx 2−1).
+  int _minusNoBorrowTensInteractiveRemoved = 0;
+  /// Efter lån: antal enere på minuend-siden barnet har «trukket væk» ved tryk (subOnes).
+  int _minusBorrowOnesInteractiveRemoved = 0;
+  /// 0 = oprindelige tier med gennemstregning, 1 = tier efter lån − subtrahend tier.
+  int _minusBorrowTensStep = 0;
   final _mainAnswerCtrl = TextEditingController();
   final _stepAnswerCtrl = TextEditingController();
   final _mainAnswerFocus = FocusNode();
@@ -366,8 +382,6 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
         operandLeft: widget.lesson.operandLeft,
         operandRight: widget.lesson.operandRight,
         isAddition: widget.lesson.isAddition,
-        minusAnswer:
-            widget.lesson.isAddition ? null : widget.lesson.expectedAnswer,
         playCoinTtsFallback: _playCoinTtsFallback,
       );
       if (!ok && mounted) {
@@ -580,10 +594,143 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
     );
   }
 
-  Future<void> _startSubTensGuided() async {
+  /// Plus: spring ener-trin over når ene-summen er 0 (fx 10+20); ellers er der enere at tælle.
+  bool get _additionNeedsOnesStep =>
+      widget.lesson.isAddition && _onesSum != 0;
+
+  Future<void> _startAdditionGuidedFromIntroOrRetry() async {
+    if (_additionNeedsOnesStep) {
+      await _startAddOnesGuided();
+    } else {
+      await _goToAddTensCountAndAskTens();
+    }
+  }
+
+  /// Minus efter intro / forkert svar: afspil energennemgang → (evt. svar enere) → tier-gennemgang → svar tiere.
+  Future<void> _startMinusGuidedAfterIntroOrWrong() async {
+    await _stopTts();
+    if (!mounted) return;
+    setState(() => _speaking = true);
+    try {
+      await _assetClipPlayer.stop();
+    } catch (_) {}
+
+    final lesson = widget.lesson;
+    final exp = lesson.expectedAnswer;
+    final a = lesson.operandLeft;
+    final b = lesson.operandRight;
+
+    final borrow = mathTutorMinusNeedsBorrowTenToOnes(a, b);
+    _minusUsedBorrow = borrow;
+    _minusBorrowCoinStep = 0;
+    _minusBorrowOnesInteractiveRemoved = 0;
+    _minusBorrowTensStep = 0;
+
+    if (borrow) {
+      setState(() {
+        _phase = _TutorPhase.minusBorrowWalk;
+        _minusBorrowCoinStep = 0;
+      });
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final ok = await mathTutorTryPlayMinusBorrowOnesDetailedWalkthrough(
+        player: _assetClipPlayer,
+        operandLeft: a,
+        operandRight: b,
+        onVisualStep: (step) async {
+          if (!mounted) return;
+          setState(() => _minusBorrowCoinStep = step);
+          if (step != 0) {
+            await Future<void>.delayed(const Duration(milliseconds: 90));
+          }
+        },
+      );
+      if (!ok && mounted) {
+        final ao = a % 10;
+        final bo = b % 10;
+        final adj = 10 + ao;
+        await _speakLine(
+          'Vi starter med enerne, det vil sige $ao minus $bo. '
+          'Det kan vi ikke, for så bliver det et minus tal; vi må derfor låne en tier. '
+          'Vi veksler en tier til ti enere. Så har vi $adj. '
+          'Nu er det $adj enere minus $bo enere. Skriv svaret i boksen.',
+        );
+      }
+    } else {
+      if (exp % 10 != 0) {
+        if (!mounted) return;
+        setState(() {
+          _speaking = true;
+          _phase = _TutorPhase.subOnes;
+          _stepAnswerCtrl.clear();
+          _minusBorrowOnesInteractiveRemoved = 0;
+        });
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+      }
+      final okOpen = await mathTutorTryPlayMinusOnesNoBorrowViStarterOpening(
+        player: _assetClipPlayer,
+        operandLeft: a,
+        operandRight: b,
+      );
+      if (!okOpen && mounted) {
+        final ao = a % 10;
+        final bo = b % 10;
+        await _speakLine(
+          'Vi starter med enerne, det vil sige $ao minus $bo.',
+        );
+      }
+    }
+    if (!mounted) return;
+
+    if (exp % 10 != 0) {
+      if (borrow) {
+        if (!mounted) return;
+        setState(() {
+          _speaking = true;
+          _phase = _TutorPhase.subOnes;
+          _stepAnswerCtrl.clear();
+          _minusBorrowOnesInteractiveRemoved = 0;
+        });
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+      }
+      final okTaps = await mathTutorTryPlayMinusBorrowInteractiveOnesInstruction(
+        player: _assetClipPlayer,
+        subtrahendOnes: b % 10,
+      );
+      if (!okTaps && mounted) {
+        final bo = b % 10;
+        await _speakLine(
+          'Du skal altså trække $bo guldmønter fra. '
+          'Tryk på $bo guldmønter for at fjerne dem og se resultatet.',
+        );
+      }
+      if (!mounted) return;
+      setState(() => _speaking = false);
+      _focusStepField();
+      return;
+    }
+
+    var ok = await mathTutorTryPlayMinusTensExplanation(
+      player: _assetClipPlayer,
+      operandLeft: a,
+      operandRight: b,
+      useBorrowTierPreamble: borrow,
+    );
+    if (!ok && mounted) {
+      final at = borrow ? a ~/ 10 - 1 : a ~/ 10;
+      await _speakLine(
+        'Der er $at. Hvis du bruger ${b ~/ 10}, '
+        'hvor mange tiere har du så tilbage?',
+      );
+    }
+    if (!mounted) return;
     setState(() {
+      _speaking = false;
       _phase = _TutorPhase.subTens;
       _stepAnswerCtrl.clear();
+      _minusNoBorrowTensInteractiveRemoved = 0;
     });
     _focusStepField();
     await _speakGuidedWithAsset(
@@ -613,9 +760,9 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
     await Future<void>.delayed(const Duration(milliseconds: 450));
     if (!mounted) return;
     if (widget.lesson.isAddition) {
-      await _startAddOnesGuided();
+      await _startAdditionGuidedFromIntroOrRetry();
     } else {
-      await _startSubTensGuided();
+      await _startMinusGuidedAfterIntroOrWrong();
     }
   }
 
@@ -633,6 +780,9 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
     switch (_phase) {
       case _TutorPhase.intro:
         return 3;
+      case _TutorPhase.minusBorrowWalk:
+      case _TutorPhase.minusBorrowTensWalk:
+        return 1;
       case _TutorPhase.addOnesSum:
         return 2;
       case _TutorPhase.addOnesDigit:
@@ -642,6 +792,7 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
       case _TutorPhase.subOnes:
         return 2;
       case _TutorPhase.addResultPraise:
+      case _TutorPhase.minusBorrowFinalResult:
         return 3;
     }
   }
@@ -704,8 +855,39 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
     );
   }
 
+  /// Lille rød «videre» (intro): springer til guidet flow uden fuldt svar.
+  Widget _tutorVidereArrowButton({required VoidCallback? onPressed}) {
+    return Material(
+      color: const Color(0xFFE53935),
+      borderRadius: BorderRadius.circular(22),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onPressed,
+        child: const Padding(
+          padding: EdgeInsets.all(10),
+          child: Icon(Icons.arrow_forward, color: Colors.white, size: 22),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onIntroVidere() async {
+    if (_speaking || !_ttsReady) return;
+    await _stopTts();
+    if (!mounted) return;
+    if (widget.lesson.isAddition) {
+      await _startAdditionGuidedFromIntroOrRetry();
+    } else {
+      await _startMinusGuidedAfterIntroOrWrong();
+    }
+  }
+
   Future<void> _onGuidedOk() async {
-    if (_phase == _TutorPhase.addResultPraise) return;
+    if (_phase == _TutorPhase.addResultPraise ||
+        _phase == _TutorPhase.minusBorrowFinalResult) {
+      return;
+    }
     final raw = _stepAnswerCtrl.text.trim().replaceAll(' ', '');
     final v = int.tryParse(raw);
     if (v == null) {
@@ -757,25 +939,136 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
         await _speakGuidedWithAsset('Godt gået.');
       case _TutorPhase.subTens:
         if (v != exp ~/ 10) {
+          if (!widget.lesson.isAddition &&
+              !_minusUsedBorrow &&
+              widget.lesson.operandRight ~/ 10 > 0) {
+            if (mounted) {
+              setState(() => _minusNoBorrowTensInteractiveRemoved = 0);
+            }
+          }
           await _speakNejProevIgenWithAsset();
           return;
         }
         if (!mounted) return;
         setState(() {
-          _phase = _TutorPhase.subOnes;
-          _stepAnswerCtrl.clear();
+          _speaking = true;
+          _phase = _TutorPhase.minusBorrowFinalResult;
         });
-        _focusStepField();
-        await _speakGuidedWithAsset('Hvor mange enere er der?');
+        try {
+          await _assetClipPlayer.stop();
+        } catch (_) {}
+        final okFinal = await mathTutorTryPlayMinusBorrowFinalResultPraise(
+          player: _assetClipPlayer,
+          expectedAnswer: exp,
+        );
+        if (!okFinal && mounted) {
+          await _speakLine('Svaret er $exp. Godt gået.');
+        }
+        if (!mounted) return;
+        setState(() => _speaking = false);
+        return;
       case _TutorPhase.subOnes:
         if (v != exp % 10) {
+          if (!widget.lesson.isAddition && mounted) {
+            setState(() => _minusBorrowOnesInteractiveRemoved = 0);
+          }
           await _speakNejProevIgenWithAsset();
           return;
         }
-        await _stopTts();
-        if (mounted) Navigator.pop(context, true);
+        if (!mounted) return;
+        final a = widget.lesson.operandLeft;
+        final b = widget.lesson.operandRight;
+        if (_minusUsedBorrow) {
+          setState(() {
+            _speaking = true;
+            _phase = _TutorPhase.minusBorrowTensWalk;
+            _minusBorrowTensStep = 0;
+          });
+        }
+        try {
+          await _assetClipPlayer.stop();
+        } catch (_) {}
+        if (_minusUsedBorrow) {
+          final okWalk = await mathTutorTryPlayMinusBorrowTensAfterOnesWalkthrough(
+            player: _assetClipPlayer,
+            operandLeft: a,
+            operandRight: b,
+            onVisualStep: (step) async {
+              if (!mounted) return;
+              setState(() => _minusBorrowTensStep = step);
+              await Future<void>.delayed(const Duration(milliseconds: 90));
+            },
+          );
+          if (!okWalk && mounted) {
+            final ot = a ~/ 10;
+            final nt = a ~/ 10 - 1;
+            final bt = b ~/ 10;
+            await _speakLine(
+              'Der var $ot tiere, men vi brugte den ene, så nu er der kun $nt. '
+              'Nu er det $nt minus $bt. Skriv svaret i boksen.',
+            );
+          }
+        } else {
+          if (!mounted) return;
+          setState(() {
+            _speaking = true;
+            _phase = _TutorPhase.subTens;
+            _stepAnswerCtrl.clear();
+            _minusNoBorrowTensInteractiveRemoved = 0;
+          });
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted) return;
+          try {
+            await _assetClipPlayer.stop();
+          } catch (_) {}
+          final okOpen = await mathTutorTryPlayMinusNoBorrowTensAfterOnesOpening(
+            player: _assetClipPlayer,
+            operandLeft: a,
+            operandRight: b,
+          );
+          if (!okOpen && mounted) {
+            await _speakLine(
+              'Så går vi til tierne. Der er ${a ~/ 10}. '
+              'Det er ${a ~/ 10} minus ${b ~/ 10}.',
+            );
+          }
+          final bt = b ~/ 10;
+          if (bt > 0) {
+            final okTaps =
+                await mathTutorTryPlayMinusBorrowInteractiveOnesInstruction(
+              player: _assetClipPlayer,
+              subtrahendOnes: bt,
+            );
+            if (!okTaps && mounted) {
+              await _speakLine(
+                'Du skal altså trække $bt guldmønter fra. '
+                'Tryk på $bt guldmønter for at fjerne dem og se resultatet.',
+              );
+            }
+          }
+          if (!mounted) return;
+          setState(() => _speaking = false);
+          _focusStepField();
+          await _speakGuidedWithAsset(
+            'Hvor mange tiere er der?',
+            basenameAliases: _kGuidedHvorMangeTiereAliases,
+          );
+          return;
+        }
+        if (!mounted) return;
+        setState(() {
+          _speaking = false;
+          _phase = _TutorPhase.subTens;
+          _stepAnswerCtrl.clear();
+          _minusNoBorrowTensInteractiveRemoved = 0;
+        });
+        _focusStepField();
+        break;
       case _TutorPhase.intro:
+      case _TutorPhase.minusBorrowWalk:
+      case _TutorPhase.minusBorrowTensWalk:
       case _TutorPhase.addResultPraise:
+      case _TutorPhase.minusBorrowFinalResult:
         break;
     }
   }
@@ -785,17 +1078,82 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
     if (mounted) Navigator.pop(context, true);
   }
 
+  Widget _buildMinusBorrowWalkContent(BuildContext context) {
+    final a = widget.lesson.operandLeft;
+    final b = widget.lesson.operandRight;
+    final ao = a % 10;
+    final bo = b % 10;
+    final adj = 10 + ao;
+    switch (_minusBorrowCoinStep) {
+      case 1:
+        return mathTutorMinusBorrowTierAboveOnesBlock(
+          context,
+          minuendOnes: ao,
+          subtrahendOnes: bo,
+        );
+      case 2:
+        return mathTutorMinusBorrowTierEqualsTenOnesColumn(
+          context,
+          minuendOnes: ao,
+          subtrahendOnes: bo,
+        );
+      case 3:
+        return mathTutorMinusBorrowFinalOnesSubtract(
+          context,
+          minuendOnesAfterBorrow: adj,
+          subtrahendOnes: bo,
+        );
+      case 0:
+      default:
+        return mathTutorMinusBorrowOnesEquationWithCoins(
+          context,
+          minuendOnes: ao,
+          subtrahendOnes: bo,
+        );
+    }
+  }
+
+  Widget _buildMinusBorrowTensWalkContent(BuildContext context) {
+    final a = widget.lesson.operandLeft;
+    final b = widget.lesson.operandRight;
+    final a0 = a ~/ 10;
+    final a1 = a ~/ 10 - 1;
+    final bt = b ~/ 10;
+    switch (_minusBorrowTensStep) {
+      case 1:
+        return Align(
+          alignment: Alignment.topCenter,
+          child: mathTutorMinusBorrowTensEquationWithCoins(
+            context,
+            minuendTensAfterBorrow: a1,
+            subtrahendTens: bt,
+          ),
+        );
+      case 0:
+      default:
+        return Align(
+          alignment: Alignment.topCenter,
+          child: mathTutorMinusBorrowTensWithBorrowStruck(
+            context,
+            originalTenCount: a0,
+          ),
+        );
+    }
+  }
+
   Widget _buildPhaseContent(BuildContext context) {
     final lesson = widget.lesson;
     final exp = lesson.expectedAnswer;
     switch (_phase) {
       case _TutorPhase.intro:
-        final w = lesson.screenWidgets;
-        final body = w.length > 2 ? w.sublist(2) : w;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: body,
+          children: lesson.screenWidgets,
         );
+      case _TutorPhase.minusBorrowWalk:
+        return _buildMinusBorrowWalkContent(context);
+      case _TutorPhase.minusBorrowTensWalk:
+        return _buildMinusBorrowTensWalkContent(context);
       case _TutorPhase.addOnesSum:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -816,12 +1174,9 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
           children: lesson.screenWidgets,
         );
       case _TutorPhase.addTensCount:
-        final tensVal = _tensTotal * 10;
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            mathTutorEquationHeader(lesson.promptLine),
-            const SizedBox(height: 12),
             Text(
               _tensTotal == 0
                   ? 'Der er ingen tiere:'
@@ -834,18 +1189,16 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                 color: Colors.grey.shade900,
               ),
             ),
-            const SizedBox(height: 8),
-            mathTutorCoinPileForNumber(context, tensVal, caption: null),
+            if (_tensTotal > 0) ...[
+              const SizedBox(height: 12),
+              mathTutorTenCoinsRowOnly(context, _tensTotal),
+            ],
           ],
         );
       case _TutorPhase.addResultPraise:
-        final completedEquation =
-            '${lesson.operandLeft}${lesson.isAddition ? '+' : '-'}${lesson.operandRight}=$exp';
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            mathTutorEquationHeader(completedEquation),
-            const SizedBox(height: 12),
             Text(
               'Sådan ser hele svaret ud:',
               style: TextStyle(
@@ -854,36 +1207,125 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                 color: Colors.grey.shade900,
               ),
             ),
-            const SizedBox(height: 8),
-            mathTutorCoinPileForNumber(context, exp, caption: null),
+            const SizedBox(height: 12),
+            mathTutorNumberEqualsCoinPile(context, exp),
+          ],
+        );
+      case _TutorPhase.minusBorrowFinalResult:
+        final a = lesson.operandLeft;
+        final b = lesson.operandRight;
+        final completed =
+            '$a${lesson.isAddition ? '+' : '-'}$b=$exp';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Text(
+                completed,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  height: 1.05,
+                  color: Color(0xFF1B1B1B),
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            mathTutorNumberEqualsCoinPile(context, exp),
           ],
         );
       case _TutorPhase.subTens:
-        final tensValue = (exp ~/ 10) * 10;
+        if (!lesson.isAddition && _minusUsedBorrow) {
+          final a = lesson.operandLeft;
+          final b = lesson.operandRight;
+          return Align(
+            alignment: Alignment.topCenter,
+            child: mathTutorMinusBorrowTensEquationWithCoins(
+              context,
+              minuendTensAfterBorrow: a ~/ 10 - 1,
+              subtrahendTens: b ~/ 10,
+            ),
+          );
+        }
+        if (!lesson.isAddition && !_minusUsedBorrow) {
+          final at = lesson.operandLeft ~/ 10;
+          final bt = lesson.operandRight ~/ 10;
+          if (bt > 0) {
+            return Align(
+              alignment: Alignment.topCenter,
+              child: mathTutorMinusBorrowTappableTensSubtract(
+                context,
+                minuendTens: at,
+                subtrahendTens: bt,
+                removedFromMinuend: _minusNoBorrowTensInteractiveRemoved,
+                onTapRemoveOneFromMinuend: () {
+                  if (_speaking ||
+                      _minusNoBorrowTensInteractiveRemoved >= bt) {
+                    return;
+                  }
+                  setState(() => _minusNoBorrowTensInteractiveRemoved++);
+                },
+              ),
+            );
+          }
+          return Align(
+            alignment: Alignment.topCenter,
+            child: mathTutorMinusBorrowTensEquationWithCoins(
+              context,
+              minuendTensAfterBorrow: at,
+              subtrahendTens: bt,
+            ),
+          );
+        }
+        final tensDigit = exp ~/ 10;
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            mathTutorEquationHeader(lesson.promptLine),
-            const SizedBox(height: 12),
             Text(
-              'Sådan ser tierne i svaret ud:',
+              tensDigit == 0
+                  ? 'Der er ingen tier i svaret:'
+                  : 'Sådan ser tierne i svaret ud:',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Colors.grey.shade900,
               ),
             ),
-            const SizedBox(height: 8),
-            mathTutorCoinPileForNumber(context, tensValue, caption: null),
+            if (tensDigit > 0) ...[
+              const SizedBox(height: 12),
+              mathTutorTenCoinsRowOnly(context, tensDigit),
+            ],
           ],
         );
       case _TutorPhase.subOnes:
         final ones = exp % 10;
+        if (!lesson.isAddition && ones != 0) {
+          final a = lesson.operandLeft;
+          final b = lesson.operandRight;
+          final ao = a % 10;
+          final bo = b % 10;
+          final leftOnes = _minusUsedBorrow ? 10 + ao : ao;
+          return Align(
+            alignment: Alignment.topCenter,
+            child: mathTutorMinusBorrowTappableOnesSubtract(
+              context,
+              minuendOnesAfterBorrow: leftOnes,
+              subtrahendOnes: bo,
+              removedFromMinuend: _minusBorrowOnesInteractiveRemoved,
+              onTapRemoveOneFromMinuend: () {
+                if (_speaking || _minusBorrowOnesInteractiveRemoved >= bo) {
+                  return;
+                }
+                setState(() => _minusBorrowOnesInteractiveRemoved++);
+              },
+            ),
+          );
+        }
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            mathTutorEquationHeader(lesson.promptLine),
-            const SizedBox(height: 12),
             Text(
               'Sådan ser enere i svaret ud:',
               style: TextStyle(
@@ -892,8 +1334,8 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                 color: Colors.grey.shade900,
               ),
             ),
-            const SizedBox(height: 8),
-            mathTutorCoinPileForNumber(context, ones, caption: null),
+            const SizedBox(height: 12),
+            mathTutorNumberEqualsCoinPile(context, ones),
           ],
         );
     }
@@ -901,9 +1343,56 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
 
   Widget _buildAnswerPanel(BuildContext context, {required bool useNumpad}) {
     const pad = EdgeInsets.fromLTRB(16, 10, 60, 14);
+    const padIntro = EdgeInsets.fromLTRB(16, 10, 112, 14);
+    /// Bundpanel: samme skriftstørrelse for tal og `=` (flugter visuelt).
+    const eqPromptStyleIntro = TextStyle(
+      fontSize: 34,
+      fontWeight: FontWeight.w800,
+      height: 1.05,
+      color: Color(0xFF1B1B1B),
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+    const eqEqualsStyleIntro = TextStyle(
+      fontSize: 34,
+      fontWeight: FontWeight.w800,
+      color: Color(0xFF1B1B1B),
+    );
+    const eqPromptStyleGuided = TextStyle(
+      fontSize: 30,
+      fontWeight: FontWeight.w800,
+      height: 1.05,
+      color: Color(0xFF1B1B1B),
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+    const eqEqualsStyleGuided = TextStyle(
+      fontSize: 30,
+      fontWeight: FontWeight.w800,
+      color: Color(0xFF1B1B1B),
+    );
     final readOnly = useNumpad;
     final kbType =
         readOnly ? TextInputType.none : TextInputType.number;
+
+    if (_phase == _TutorPhase.minusBorrowWalk ||
+        _phase == _TutorPhase.minusBorrowTensWalk) {
+      return Material(
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+          child: Center(
+            child: Text(
+              'Lyt til forklaringen …',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     if (_phase == _TutorPhase.intro) {
       return Material(
@@ -912,37 +1401,24 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
           clipBehavior: Clip.none,
           children: [
             Padding(
-              padding: pad,
+              padding: padIntro,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Flexible(
                     child: Text(
                       widget.lesson.promptLine.trim(),
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
-                        color: Colors.grey.shade900,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                      style: eqPromptStyleIntro,
                     ),
                   ),
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(6, 0, 4, 4),
-                    child: Text(
-                      '=',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1B1B1B),
-                      ),
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('=', style: eqEqualsStyleIntro),
                   ),
                   SizedBox(
-                    width: 52,
+                    width: 62,
                     child: TextField(
                       controller: _mainAnswerCtrl,
                       focusNode: _mainAnswerFocus,
@@ -951,12 +1427,12 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                       keyboardType: kbType,
                       maxLength: 3,
                       textAlign: TextAlign.center,
+                      textAlignVertical: TextAlignVertical.center,
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
                       ],
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                      style: eqPromptStyleIntro.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                       decoration: InputDecoration(
                         filled: true,
@@ -964,8 +1440,8 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                         counterText: '',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 12,
+                          horizontal: 4,
+                          vertical: 10,
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -982,10 +1458,21 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: _tutorRoundOkButton(
-                  onPressed: _speaking || !_ttsReady
-                      ? null
-                      : () => unawaited(_onDirectOk()),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _tutorRoundOkButton(
+                      onPressed: _speaking || !_ttsReady
+                          ? null
+                          : () => unawaited(_onDirectOk()),
+                    ),
+                    const SizedBox(width: 10),
+                    _tutorVidereArrowButton(
+                      onPressed: _speaking || !_ttsReady
+                          ? null
+                          : () => unawaited(_onIntroVidere()),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1003,35 +1490,22 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
             Padding(
               padding: pad,
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Flexible(
                     child: Text(
-                      widget.lesson.promptLine.trim(),
+                      mathTutorOnesPromptLine(widget.lesson),
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
-                        color: Colors.grey.shade900,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                      style: eqPromptStyleIntro,
                     ),
                   ),
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(6, 0, 4, 4),
-                    child: Text(
-                      '=',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1B1B1B),
-                      ),
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('=', style: eqEqualsStyleIntro),
                   ),
                   SizedBox(
-                    width: 52,
+                    width: 62,
                     child: TextField(
                       controller: _stepAnswerCtrl,
                       focusNode: _stepFocus,
@@ -1041,13 +1515,13 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                       keyboardType: kbType,
                       maxLength: _tutorStepMaxDigits(),
                       textAlign: TextAlign.center,
+                      textAlignVertical: TextAlignVertical.center,
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
                         LengthLimitingTextInputFormatter(_tutorStepMaxDigits()),
                       ],
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                      style: eqPromptStyleIntro.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                       decoration: InputDecoration(
                         filled: true,
@@ -1055,8 +1529,8 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
                         counterText: '',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 12,
+                          horizontal: 4,
+                          vertical: 10,
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -1085,13 +1559,35 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
       );
     }
 
-    if (_phase == _TutorPhase.addResultPraise) {
+    if (_phase == _TutorPhase.addResultPraise ||
+        _phase == _TutorPhase.minusBorrowFinalResult) {
+      final exp = widget.lesson.expectedAnswer;
+      final completedEquation =
+          '${widget.lesson.operandLeft}${widget.lesson.isAddition ? '+' : '-'}${widget.lesson.operandRight}=$exp';
       return Material(
         color: Colors.white,
         child: SizedBox(
-          height: 72,
+          height: 96,
           child: Stack(
             children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 64),
+                  child: Center(
+                    child: Text(
+                      completedEquation,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        height: 1.05,
+                        color: Color(0xFF1B1B1B),
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               Positioned(
                 right: 8,
                 top: 0,
@@ -1111,31 +1607,46 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
     }
 
     if (_phase == _TutorPhase.addOnesDigit) {
+      final line = mathTutorOnesPromptLine(widget.lesson);
       return Material(
         color: Colors.white,
         child: Padding(
           padding: pad,
-          child: const SizedBox.shrink(),
+          child: Center(
+            child: Text(
+              '$line =',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+                color: Color(0xFF1B1B1B),
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
         ),
       );
     }
 
-    final String hint;
-    switch (_phase) {
-      case _TutorPhase.addOnesSum:
-        hint = '';
-      case _TutorPhase.addOnesDigit:
-        hint = '';
-      case _TutorPhase.addTensCount:
-        hint = 'Hvor mange tiere? (tæl guldmønterne ovenfor)';
-      case _TutorPhase.subTens:
-        hint = 'Hvor mange tiere er der? (tæl guldmønterne på 10)';
-      case _TutorPhase.subOnes:
-        hint = 'Hvor mange enere er der?';
-      case _TutorPhase.intro:
-      case _TutorPhase.addResultPraise:
-        hint = '';
-    }
+    final guidedEquationLeft = () {
+      if (_phase == _TutorPhase.subTens &&
+          !widget.lesson.isAddition &&
+          _minusUsedBorrow) {
+        return '${widget.lesson.operandLeft ~/ 10 - 1}-'
+            '${widget.lesson.operandRight ~/ 10}';
+      }
+      if (_phase == _TutorPhase.subTens &&
+          !widget.lesson.isAddition &&
+          !_minusUsedBorrow) {
+        return '${widget.lesson.operandLeft ~/ 10}-'
+            '${widget.lesson.operandRight ~/ 10}';
+      }
+      if (_phase == _TutorPhase.subOnes && !widget.lesson.isAddition) {
+        return mathTutorOnesPromptLine(widget.lesson);
+      }
+      return widget.lesson.promptLine.trim();
+    }();
 
     return Material(
       color: Colors.white,
@@ -1144,26 +1655,55 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
         children: [
           Padding(
             padding: pad,
-            child: TextField(
-              controller: _stepAnswerCtrl,
-              focusNode: _stepFocus,
-              enabled: !_speaking,
-              readOnly: readOnly,
-              showCursor: true,
-              keyboardType: kbType,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
-                LengthLimitingTextInputFormatter(_tutorStepMaxDigits()),
-              ],
-              decoration: InputDecoration(
-                labelText: hint.isEmpty ? null : hint,
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    guidedEquationLeft,
+                    textAlign: TextAlign.center,
+                    style: eqPromptStyleGuided,
+                  ),
                 ),
-              ),
-              onSubmitted: (_) => unawaited(_onGuidedOk()),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('=', style: eqEqualsStyleGuided),
+                ),
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: _stepAnswerCtrl,
+                    focusNode: _stepFocus,
+                    enabled: !_speaking,
+                    readOnly: readOnly,
+                    showCursor: true,
+                    keyboardType: kbType,
+                    textAlign: TextAlign.center,
+                    textAlignVertical: TextAlignVertical.center,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+                      LengthLimitingTextInputFormatter(_tutorStepMaxDigits()),
+                    ],
+                    style: eqPromptStyleGuided.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onSubmitted: (_) => unawaited(_onGuidedOk()),
+                  ),
+                ),
+              ],
             ),
           ),
           Positioned(
@@ -1225,24 +1765,36 @@ class _MathTutorHelpSheetBodyState extends State<_MathTutorHelpSheetBody> {
               ),
             ),
             Expanded(
-              child: Scrollbar(
-                thumbVisibility: true,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _buildPhaseContent(context),
-                    ],
-                  ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    return FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: c.maxWidth),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            _buildPhaseContent(context),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
             _buildAnswerPanel(context, useNumpad: useNumpad),
             if (showKeypad)
-              KidMathNumericKeypad(
-                onDigit: _tutorNumpadDigit,
-                onBackspace: _tutorNumpadBackspace,
+              Padding(
+                padding: const EdgeInsets.only(top: 10, bottom: 6),
+                child: KidMathNumericKeypad(
+                  onDigit: _tutorNumpadDigit,
+                  onBackspace: _tutorNumpadBackspace,
+                ),
               ),
             SizedBox(height: safe.bottom),
           ],

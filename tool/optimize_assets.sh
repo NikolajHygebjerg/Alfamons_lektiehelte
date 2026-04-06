@@ -28,7 +28,7 @@ for svg in assets/*.svg; do
 
   # Kort: altid raster først i AlfamonCard
   if [[ "${bn}" == *kort* ]] || [[ "${bn}" == *Kort* ]]; then
-    if [[ -f "${base}.png" || -f "${base}.jpg" ]]; then
+    if [[ -f "${base}.webp" || -f "${base}.png" || -f "${base}.jpg" ]]; then
       maybe_rm "$svg"
     fi
     continue
@@ -36,7 +36,7 @@ for svg in assets/*.svg; do
 
   # moent / kiste: kode bruger .png
   if [[ "$bn" == "moent.svg" || "$bn" == "kiste.svg" ]]; then
-    if [[ -f "${base}.png" ]]; then
+    if [[ -f "${base}.webp" || -f "${base}.png" ]]; then
       maybe_rm "$svg"
     fi
   fi
@@ -44,7 +44,7 @@ done
 
 # Ældre A-elgor-filer med små bogstavers PNG
 for n in 3 4; do
-  if [[ -f "assets/aelgorkort${n}.png" ]]; then
+  if [[ -f "assets/aelgorkort${n}.webp" || -f "assets/aelgorkort${n}.png" ]]; then
     maybe_rm "assets/Aelgorkort${n}.svg"
   fi
 done

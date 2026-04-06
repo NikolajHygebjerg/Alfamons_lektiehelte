@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/kid.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/kid_session_nav_button.dart';
 
 /// Vælg ven at udfordre – kun børn under samme forælder.
@@ -473,6 +474,11 @@ class _KidSpilVenScreenState extends State<KidSpilVenScreen> {
               kidId: widget.kidId,
               fallbackLocation: '/kid/spil/${widget.kidId}',
             ),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: 8,
+            child: const KidParentAdminCornerButton(),
           ),
         ],
       ),

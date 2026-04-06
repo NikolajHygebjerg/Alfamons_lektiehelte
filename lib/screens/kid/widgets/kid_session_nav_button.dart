@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Pil / log ud: på barnets **hjem** → forsiden (vælg admin/barn); ellers `pop` eller [fallbackLocation].
+/// Pil / log ud: på barnets **hjem** → barn-valg (`/`); ellers `pop` eller [fallbackLocation].
 class KidSessionNavButton extends StatelessWidget {
   const KidSessionNavButton({
     super.key,

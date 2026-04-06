@@ -1,0 +1,14 @@
+# Kopiér til android/key.properties og udfyld værdierne.
+# key.properties er ignoreret af git – upload ikke keystore eller passwords.
+#
+# Opret upload-keystore (én gang): se
+# https://docs.flutter.dev/deployment/android#sign-the-app
+#
+# Eksempel hvis .jks ligger i mappen android/app/:
+#   storeFile=app/upload-keystore.jks
+# (sti er relativ til android/)
+
+storePassword=dit_store_password
+keyPassword=dit_key_password
+keyAlias=upload
+storeFile=app/upload-keystore.jks

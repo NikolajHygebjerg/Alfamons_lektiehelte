@@ -8,12 +8,12 @@ import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/math_tasks_service.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import '../../utils/math_task_parse.dart';
 import '../../utils/math_tutor_lesson.dart';
 import '../../utils/math_tutor_prerecorded_intro.dart';
 import '../../utils/math_vertical_prompt.dart';
 import 'kid_layout_constants.dart';
-import 'math_play_paper_layout.dart';
 import 'widgets/gold_coins_earned_overlay.dart';
 import 'widgets/kid_gold_treasury_corner.dart';
 import 'widgets/kid_math_black_popup_card.dart';
@@ -269,6 +269,58 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
     });
   }
 
+  /// Skifter mellem vandret og lodret opstilling (3× større knap end tidl. 24 px).
+  static const double _mathOpstillingIconSize = 72;
+
+  void _onMathOpstillingTogglePressed() {
+    setState(() {
+      if (!_useVerticalAddSub) {
+        _useVerticalAddSub = true;
+        _syncVerticalDigitControllersFromCurrentTask();
+        final raw = _answer.text.trim();
+        if (RegExp(r'^\d+$').hasMatch(raw) && raw.isNotEmpty) {
+          _fillVerticalControllersRightAligned(raw);
+        }
+      } else {
+        _useVerticalAddSub = false;
+        final merged = _composedVerticalAnswer();
+        if (merged.isNotEmpty) {
+          _answer.text = merged;
+        }
+        _disposeVertDigitFieldsOnly();
+      }
+    });
+    _focusAnswerField();
+  }
+
+  Widget _mathOpstillingToggleButton() {
+    const pad = 12.0;
+    const r = 21.0;
+    return Material(
+      color: Colors.white.withValues(alpha: 0.9),
+      elevation: _useVerticalAddSub ? 4 : 1,
+      borderRadius: BorderRadius.circular(r),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _onMathOpstillingTogglePressed,
+        child: Padding(
+          padding: const EdgeInsets.all(pad),
+          child: Image.asset(
+            'assets/math_opstill_ikon.webp',
+            height: _mathOpstillingIconSize,
+            width: _mathOpstillingIconSize,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, _, _) => Icon(
+              Icons.view_agenda,
+              size: _mathOpstillingIconSize * 0.72,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _maybeAutoSwitchVerticalFocus(int n, int changedIndex) {
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -400,32 +452,26 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
         _useVerticalAnswerFields() ? _composedVerticalAnswer() : _answer.text;
     if (!mathAnswersMatch(expected, given)) {
       if (!mounted) return;
-      final prompt = task['prompt'] as String? ?? '';
-      final tutorOnTask = tryParseSingleAddSub(prompt) != null;
-      if (!tutorOnTask) {
-        try {
-          await _wrongAnswerPlayer.stop();
-        } catch (_) {}
-        final played = await mathTutorTryPlayOevProevIgen(_wrongAnswerPlayer);
-        if (played && mounted) {
-          _focusAnswerField();
-          return;
-        }
+      try {
+        await _wrongAnswerPlayer.stop();
+      } catch (_) {}
+      final played = await mathTutorTryPlayOevProevIgen(_wrongAnswerPlayer);
+      if (mounted) _focusAnswerField();
+      if (!played && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Øv - prøv igen'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        if (mounted) _focusAnswerField();
       }
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Øv - prøv igen'),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      _focusAnswerField();
       return;
     }
 
@@ -453,7 +499,7 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Image.asset(
-                'assets/moent.png',
+                'assets/moent.webp',
                 height: 88,
                 width: 88,
                 fit: BoxFit.contain,
@@ -560,7 +606,7 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
   Widget _mathBackground() {
     return Positioned.fill(
       child: Image.asset(
-        'assets/baggrund_matematik2.png',
+        'assets/baggrund_matematik2.webp',
         fit: BoxFit.cover,
         filterQuality: FilterQuality.medium,
         errorBuilder: (_, _, _) => Container(
@@ -753,67 +799,77 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
         _checkAnswerButton(),
       ],
     );
-    final horizontalRowWide = Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Text(
-            prompt.trim(),
-            textAlign: TextAlign.end,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: promptStyle,
-          ),
-        ),
-        const SizedBox(width: 8),
-        const Text(
-          '=',
-          style: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.w800,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(width: 8),
-        answerField,
-        const SizedBox(width: 10),
-        _checkAnswerButton(),
-      ],
-    );
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (vertical)
-          Center(
-            child: MathVerticalAddSubView(
-              parts: addSubParts,
-              digitFontSize: _vertProblemDigitSize,
-              carryRowAbove: _buildCarryRowForVerticalAdd(
-                context,
-                addSubParts,
-                expectedAnswer,
-              ),
-              belowDoubleRule: _buildVerticalDigitSlots(
-                context,
-                expectedAnswer,
-                addSubParts,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width * 0.44;
+        final horizontalRowWide = Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxW * 0.62),
+              child: Text(
+                prompt.trim(),
+                textAlign: TextAlign.end,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: promptStyle,
               ),
             ),
-          )
-        else if (phoneTouchLayout)
-          Center(child: horizontalRowPhone)
-        else
-          horizontalRowWide,
-        SizedBox(height: vertical ? 14 : 10),
-        if (vertical)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _checkAnswerButton(),
-            ],
-          ),
-      ],
+            const SizedBox(width: 8),
+            const Text(
+              '=',
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(width: 8),
+            answerField,
+            const SizedBox(width: 10),
+            _checkAnswerButton(),
+          ],
+        );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (vertical)
+              Center(
+                child: MathVerticalAddSubView(
+                  parts: addSubParts,
+                  digitFontSize: _vertProblemDigitSize,
+                  carryRowAbove: _buildCarryRowForVerticalAdd(
+                    context,
+                    addSubParts,
+                    expectedAnswer,
+                  ),
+                  belowDoubleRule: _buildVerticalDigitSlots(
+                    context,
+                    expectedAnswer,
+                    addSubParts,
+                  ),
+                ),
+              )
+            else if (phoneTouchLayout)
+              Center(child: horizontalRowPhone)
+            else
+              horizontalRowWide,
+            SizedBox(height: vertical ? 14 : 10),
+            if (vertical)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _checkAnswerButton(),
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -834,7 +890,7 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Image.asset(
-                  'assets/moent.png',
+                  'assets/moent.webp',
                   height: 28,
                   width: 28,
                   fit: BoxFit.contain,
@@ -854,6 +910,8 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
                     shadows: _titleShadows,
                   ),
                 ),
+                const SizedBox(width: 8),
+                const KidParentAdminCornerButton(size: 40),
               ],
             ),
           ],
@@ -880,18 +938,19 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 48),
+          const KidParentAdminCornerButton(),
         ],
       ),
     );
   }
 
-  Widget _touchMathPlayBody({
+  Widget _mathPlayPaperBody({
     required BuildContext context,
     required String prompt,
     required MathTaskRow task,
     required MathAddSubParts? addSubParts,
     required bool showVerticalToggle,
+    required bool useInAppKeypad,
   }) {
     final isPhone = kidIsPhoneLayout(context);
     final sw = MediaQuery.sizeOf(context).width;
@@ -910,90 +969,85 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Stack(
+          fit: StackFit.expand,
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: SingleChildScrollView(
-                  child: _buildActiveTaskColumn(
-                    context,
-                    prompt: prompt,
-                    expectedAnswer: task['answer'] as String? ?? '',
-                    addSubParts: addSubParts,
-                    showVerticalToggle: showVerticalToggle,
-                    useInAppKeypad: true,
-                    phoneTouchLayout: isPhone,
-                  ),
+                padding: EdgeInsets.fromLTRB(
+                  14,
+                  12,
+                  showVerticalToggle ? 102 : 14,
+                  12,
+                ),
+                child: LayoutBuilder(
+                  builder: (ctx, inner) {
+                    return SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: inner.maxHeight),
+                        child: Center(
+                          child: _buildActiveTaskColumn(
+                            context,
+                            prompt: prompt,
+                            expectedAnswer: task['answer'] as String? ?? '',
+                            addSubParts: addSubParts,
+                            showVerticalToggle: showVerticalToggle,
+                            useInAppKeypad: useInAppKeypad,
+                            phoneTouchLayout: isPhone,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
             if (showVerticalToggle)
               Positioned(
-                top: 6,
-                right: 6,
-                child: Material(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  elevation: _useVerticalAddSub ? 4 : 1,
-                  borderRadius: BorderRadius.circular(7),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (!_useVerticalAddSub) {
-                          _useVerticalAddSub = true;
-                          _syncVerticalDigitControllersFromCurrentTask();
-                          final raw = _answer.text.trim();
-                          if (RegExp(r'^\d+$').hasMatch(raw) &&
-                              raw.isNotEmpty) {
-                            _fillVerticalControllersRightAligned(raw);
-                          }
-                        } else {
-                          _useVerticalAddSub = false;
-                          final merged = _composedVerticalAnswer();
-                          if (merged.isNotEmpty) {
-                            _answer.text = merged;
-                          }
-                          _disposeVertDigitFieldsOnly();
-                        }
-                      });
-                      _focusAnswerField();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Image.asset(
-                        'assets/math_opstill_ikon.png',
-                        height: 24,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.view_agenda, size: 18),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                top: 8,
+                right: 8,
+                child: _mathOpstillingToggleButton(),
               ),
           ],
         ),
       ),
     );
 
+    /// Papir ca. halvdelen af skærmbredden; minhøjde ca. halvdelen af tilgængelig højde (scroll inde i feltet).
+    final paperTargetMaxW = math.max(400.0, sw * 0.5);
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(isPhone ? 4 : 8, 2, 8, 4),
+      padding: EdgeInsets.fromLTRB(
+        isPhone ? 14 : 20,
+        12,
+        isPhone ? 14 : 20,
+        16,
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (isPhone) SizedBox(width: sw * 0.085),
           Expanded(
-            child: Align(
-              alignment: Alignment.center,
-              child: isPhone
-                  ? ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: sw * 0.50),
-                      child: paperCard,
-                    )
-                  : paperCard,
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final paperW = math.min(paperTargetMaxW, c.maxWidth);
+                final availH =
+                    c.maxHeight.isFinite && c.maxHeight > 0
+                        ? c.maxHeight
+                        : MediaQuery.sizeOf(context).height * 0.55;
+                // Ca. halvdelen af tilgængelig højde (≈ dobbelt vs. kun indholdshøjde), max 92%.
+                final paperH = math.min(
+                  availH * 0.92,
+                  math.max(400.0, availH * 0.52),
+                );
+                return Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: paperW,
+                    height: paperH,
+                    child: paperCard,
+                  ),
+                );
+              },
             ),
           ),
           if (addSubParts != null)
@@ -1009,7 +1063,7 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
                             onTap: () =>
                                 _showMathTutorHelp(context, addSubParts),
                             child: Image.asset(
-                              'assets/tutor2.png',
+                              'assets/tutor2.webp',
                               height: 88,
                               fit: BoxFit.contain,
                               errorBuilder: (_, _, _) => Icon(
@@ -1141,209 +1195,6 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
         fit: StackFit.expand,
         children: [
           _mathBackground(),
-          if (showPaper && !touchPlay)
-            Positioned.fill(
-              child: LayoutBuilder(
-                builder: (context, _) {
-                  final paper =
-                      mathPlayPaperRectOnScreen(MediaQuery.sizeOf(context));
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Positioned(
-                        left: paper.left,
-                        top: paper.top,
-                        width: math.max(1.0, paper.width),
-                        height: math.max(1.0, paper.height),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.94),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.14),
-                                blurRadius: 14,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Positioned.fill(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: LayoutBuilder(
-                                      builder: (context, c) {
-                                        return Center(
-                                          child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            alignment: Alignment.center,
-                                            child: SizedBox(
-                                              width:
-                                                  math.max(1.0, c.maxWidth),
-                                              child: Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 6,
-                                                ),
-                                                child: _buildActiveTaskColumn(
-                                                  context,
-                                                  prompt: prompt,
-                                                  expectedAnswer:
-                                                      task['answer']
-                                                              as String? ??
-                                                          '',
-                                                  addSubParts: addSubParts,
-                                                  showVerticalToggle:
-                                                      showVerticalToggle,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                if (showVerticalToggle)
-                                  Positioned(
-                                    top: 8,
-                                    right: 8,
-                                    child: Material(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.9),
-                                      elevation: _useVerticalAddSub ? 4 : 1,
-                                      borderRadius: BorderRadius.circular(7),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            if (!_useVerticalAddSub) {
-                                              _useVerticalAddSub = true;
-                                              _syncVerticalDigitControllersFromCurrentTask();
-                                              final raw =
-                                                  _answer.text.trim();
-                                              if (RegExp(r'^\d+$')
-                                                      .hasMatch(raw) &&
-                                                  raw.isNotEmpty) {
-                                                _fillVerticalControllersRightAligned(
-                                                    raw);
-                                              }
-                                            } else {
-                                              _useVerticalAddSub = false;
-                                              final merged =
-                                                  _composedVerticalAnswer();
-                                              if (merged.isNotEmpty) {
-                                                _answer.text = merged;
-                                              }
-                                              _disposeVertDigitFieldsOnly();
-                                            }
-                                          });
-                                          _focusAnswerField();
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(4),
-                                          child: Image.asset(
-                                            'assets/math_opstill_ikon.png',
-                                            height: 26,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (_, _, _) =>
-                                                const Padding(
-                                              padding: EdgeInsets.all(4),
-                                              child: Icon(
-                                                Icons.view_agenda,
-                                                size: 20,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (addSubParts != null)
-                        Builder(
-                          builder: (context) {
-                            final screenW = MediaQuery.sizeOf(context).width;
-                            final paperRight = paper.left + paper.width;
-                            final gapBesidePaper = screenW -
-                                paperRight -
-                                kidZoneHorizontalPadding;
-                            const smallH = 86.0;
-                            const largeH = 172.0;
-                            final tutorH = gapBesidePaper >= largeH * 0.52
-                                ? math.min(
-                                    largeH,
-                                    gapBesidePaper * 0.92,
-                                  )
-                                : math.min(smallH, gapBesidePaper * 0.92);
-                            final imgH =
-                                tutorH.clamp(56.0, largeH).toDouble();
-                            return Positioned(
-                              right: kidZoneHorizontalPadding,
-                              top: paper.top + 18,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => _showMathTutorHelp(
-                                      context,
-                                      addSubParts,
-                                    ),
-                                    child: Image.asset(
-                                      'assets/tutor2.png',
-                                      height: imgH,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, _, _) => Icon(
-                                        Icons.school,
-                                        size: imgH * 0.7,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  TextButton(
-                                    onPressed: () => _showMathTutorHelp(
-                                      context,
-                                      addSubParts,
-                                    ),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      backgroundColor: Colors.black
-                                          .withValues(alpha: 0.35),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    child: Text(
-                                      'Hjælp',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: imgH >= 140 ? 15 : 13,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1404,21 +1255,27 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
                                 );
                               },
                             )
-                          : touchPlay
-                              ? _touchMathPlayBody(
+                          : showPaper
+                              ? _mathPlayPaperBody(
                                   context: context,
                                   prompt: prompt,
                                   task: task,
                                   addSubParts: addSubParts,
                                   showVerticalToggle: showVerticalToggle,
+                                  useInAppKeypad: touchPlay,
                                 )
                               : const SizedBox.shrink(),
                 ),
                 if (touchPlay)
                   Padding(
                     padding: EdgeInsets.only(
-                      top: kidIsPhoneLayout(context) ? 14 : 0,
-                      bottom: kidIsPhoneLayout(context) ? 10 : 0,
+                      top: 16,
+                      bottom: math.max(
+                        12.0,
+                        MediaQuery.paddingOf(context).bottom + 8,
+                      ),
+                      left: 8,
+                      right: 8,
                     ),
                     child: KidMathNumericKeypad(
                       onDigit: _playNumpadDigit,
@@ -1432,7 +1289,11 @@ class _KidMathPlayScreenState extends State<KidMathPlayScreen> {
             Positioned(
               right: kidZoneHorizontalPadding,
               bottom: MediaQuery.paddingOf(context).bottom + 16,
-              child: KidGoldTreasuryCorner(goldCoins: _displayGoldCoins),
+              child: KidGoldTreasuryCorner(
+                kidId: widget.kidId,
+                goldCoins: _displayGoldCoins,
+                onAfterAlfamonsRoute: _load,
+              ),
             ),
           if (_overlayGold != null && _overlayGold! > 0)
             Positioned.fill(

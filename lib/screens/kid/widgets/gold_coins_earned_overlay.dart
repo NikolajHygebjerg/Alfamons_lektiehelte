@@ -40,7 +40,7 @@ class GoldCoinsEarnedOverlay extends StatelessWidget {
           child: Transform.rotate(
             angle: rot,
             child: Image.asset(
-              'assets/moent.png',
+              'assets/moent.webp',
               width: coinSize,
               height: coinSize,
               fit: BoxFit.contain,

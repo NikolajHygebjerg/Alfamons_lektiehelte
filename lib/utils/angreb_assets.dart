@@ -1,5 +1,5 @@
-/// Resolver for angreb-billeder (PNG med transparent baggrund).
-/// Format: {Navn}angreb{1-4}.png
+/// Resolver for angreb-billeder (transparent raster; typisk WebP efter konvertering).
+/// Format: {Navn}angreb{1-4}.png eller .webp afhængigt af assets (kør tool/convert_png_to_webp.py).
 /// Eksempel: Oodlobangreb1, Atiachangreb2, osv.
 class AngrebAssets {
   /// Bogstav (a-å) -> asset base for angreb
@@ -84,7 +84,7 @@ class AngrebAssets {
     'zebra': 'Zetbraangreb',
   };
 
-  /// Returnerer asset-path for angreb-billede (f.eks. 'assets/Oodlobangreb1.png').
+  /// Returnerer asset-path for angreb-billede (f.eks. 'assets/Oodlobangreb1.webp').
   /// stageIndex: 1-4 (eller 0-3, konverteres til 1-4).
   static String? getAngrebAssetPath(String avatarName, int stageIndex, {String? letter}) {
     final stage = (stageIndex >= 1 && stageIndex <= 4)
@@ -109,8 +109,8 @@ class AngrebAssets {
 
     // Dedoo 1-3 vs Deedoo 4 (filnavne i assets)
     if (base == 'Dedooangreb' && stage == 4) {
-      return 'assets/Deedooangreb4.png';
+      return 'assets/Deedooangreb4.webp';
     }
-    return 'assets/$base$stage.png';
+    return 'assets/$base$stage.webp';
   }
 }

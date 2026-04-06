@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/kid_session_nav_button.dart';
 
 /// Samlet spilskærm: Ven (venstre), Computer (midten), Aktive spil (højre).
@@ -272,7 +273,7 @@ class _KidSpilModeScreenState extends State<KidSpilModeScreen> {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: Image.asset('assets/kampskaerm.png', fit: BoxFit.cover),
+            child: Image.asset('assets/kampskaerm.webp', fit: BoxFit.cover),
           ),
           SafeArea(
             child: Column(
@@ -283,6 +284,7 @@ class _KidSpilModeScreenState extends State<KidSpilModeScreen> {
                     children: [
                       KidSessionNavButton(kidId: widget.kidId),
                       const Spacer(),
+                      const KidParentAdminCornerButton(),
                     ],
                   ),
                 ),
@@ -485,7 +487,7 @@ class _GameCard extends StatelessWidget {
                 AspectRatio(
                   aspectRatio: 4 / 3,
                   child: Image.asset(
-                    'assets/spilskaerm.png',
+                    'assets/spilskaerm.webp',
                     fit: BoxFit.cover,
                   ),
                 ),

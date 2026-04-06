@@ -48,6 +48,9 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
         return;
       }
 
+      await MathTasksService.ensureDefaultMathRootFolders(profileId);
+      if (!mounted) return;
+
       final user = Supabase.instance.client.auth.currentUser;
       final kidsRes = user == null
           ? <dynamic>[]
@@ -156,46 +159,55 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
     final c = TextEditingController();
     final raw = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tilføj opgaver'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Én opgave per linje med lighedstegn, fx:\n'
-                '1+1=2\n'
-                '12 - 3 = 9\n\n'
-                'Du kan indsætte mange linjer på én gang.',
-                style: Theme.of(ctx).textTheme.bodySmall,
+      builder: (ctx) {
+        final fieldHeight = (MediaQuery.sizeOf(ctx).height * 0.48).clamp(200.0, 520.0);
+        return AlertDialog(
+          title: const Text('Tilføj opgaver'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Én opgave per linje med lighedstegn, fx:\n'
+                    '1+1=2\n'
+                    '12 - 3 = 9\n\n'
+                    'Du kan indsætte mange linjer på én gang.',
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: fieldHeight,
+                    child: TextField(
+                      controller: c,
+                      decoration: const InputDecoration(
+                        labelText: 'Opgaver',
+                        hintText: '1+2=3\n3+4=7',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      autofocus: true,
+                      keyboardType: TextInputType.multiline,
+                      textAlignVertical: TextAlignVertical.top,
+                      maxLines: null,
+                      expands: true,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: c,
-                decoration: const InputDecoration(
-                  labelText: 'Opgaver',
-                  hintText: '1+2=3\n3+4=7',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                autofocus: true,
-                keyboardType: TextInputType.multiline,
-                minLines: 8,
-                maxLines: 18,
-              ),
-            ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuller')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, c.text),
-            child: const Text('Gem'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuller')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, c.text),
+              child: const Text('Gem'),
+            ),
+          ],
+        );
+      },
     );
     if (raw == null || raw.trim().isEmpty) return;
     final bulk = parseMathTaskPaste(raw);
@@ -441,6 +453,45 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
     }
   }
 
+  Future<void> _deleteAllTasksInFolder() async {
+    final folderId = widget.folderId;
+    if (folderId == null || _tasks.isEmpty) return;
+    final n = _tasks.length;
+    final title = _folderTitle();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Slet alle opgaver i mappen?'),
+        content: Text(
+          'Mappen «$title» har $n opgave${n == 1 ? '' : 'r'}. '
+          'Undermapper og selve mappen påvirkes ikke. Det kan ikke fortrydes.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuller')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Slet alle'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await MathTasksService.deleteAllTasksInFolder(folderId);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$n opgave${n == 1 ? '' : 'r'} slettet')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fejl: $e')));
+      }
+    }
+  }
+
   Future<void> _deleteTask(String taskId, String prompt) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -534,28 +585,35 @@ class _AdminMathScreenState extends State<AdminMathScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (widget.folderId != null) ...[
-              Row(
-                children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilledButton.icon(
+                  onPressed: _addFolder,
+                  icon: const Icon(Icons.create_new_folder_outlined),
+                  label: const Text('Ny undermappe'),
+                ),
+                if (widget.folderId != null) ...[
                   FilledButton.icon(
                     onPressed: _addTask,
                     icon: const Icon(Icons.add),
                     label: const Text('Tilføj opgave'),
                   ),
-                  const SizedBox(width: 12),
                   OutlinedButton.icon(
                     onPressed: () => _openFolderSettings(widget.folderId!),
                     icon: const Icon(Icons.settings),
                     label: const Text('Indstillinger'),
                   ),
+                  if (_tasks.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: _deleteAllTasksInFolder,
+                      icon: Icon(Icons.delete_sweep_outlined, color: Colors.red.shade800),
+                      label: Text('Slet alle opgaver', style: TextStyle(color: Colors.red.shade800)),
+                    ),
                 ],
-              ),
-              const SizedBox(height: 8),
-            ],
-            FilledButton.tonalIcon(
-              onPressed: _addFolder,
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('Ny undermappe'),
+              ],
             ),
             const SizedBox(height: 24),
             if (_folders.isNotEmpty) ...[

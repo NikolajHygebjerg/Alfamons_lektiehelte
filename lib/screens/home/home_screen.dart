@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../providers/auth_provider.dart';
-import '../../widgets/parent_code_first_setup_dialog.dart';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Efter login: **Web** → kun forælder-admin (`/admin`).
+/// **Mobil/tablet/desktop-app**: automatisk til barn-valg hvis der findes børn, ellers admin.
+/// Voksen-adgang fra barnesider: **hjørneikon** + forældrekode (ikke denne skærm).
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -18,147 +20,58 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ParentCodeFirstSetupDialog.showIfNeeded(context);
+      unawaited(_routeAfterAuth());
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final shortestSide = MediaQuery.of(context).size.shortestSide;
-    final isTablet = shortestSide >= 600;
-    final bgAsset = isTablet ? 'assets/modeipad.svg' : 'assets/modeiphone.svg';
+  Future<void> _routeAfterAuth() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (!mounted) return;
+    if (user == null) {
+      context.go('/auth');
+      return;
+    }
 
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Baggrund – iPad eller iPhone design
-          Positioned.fill(
-            child: SvgPicture.asset(
-              bgAsset,
-              fit: BoxFit.cover,
-            ),
-          ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final designWidth = isTablet ? 450.0 : 360.0;
-                final designHeight = isTablet ? 900.0 : 750.0;
-                final textSize = isTablet ? 18.0 : 16.0;
+    if (kIsWeb) {
+      if (!mounted) return;
+      context.go('/admin');
+      return;
+    }
 
-                return Center(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.center,
-                    child: SizedBox(
-                      width: designWidth,
-                      height: designHeight,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.max,
-                        children: [
-                          const Spacer(),
-                          // To knapper nederst – uden ikoner
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 32),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _ModeButton(
-                                    title: 'Admin',
-                                    onTap: () => context.go('/admin'),
-                                    textSize: textSize,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _ModeButton(
-                                    title: 'Barn',
-                                    onTap: () async {
-                                      final prefs = await SharedPreferences.getInstance();
-                                      final kidId = prefs.getString('kidId');
-                                      final kidStayLoggedIn = prefs.getBool('kidStayLoggedIn') ?? true;
-                                      if (!context.mounted) return;
-                                      if (kidId != null && kidStayLoggedIn) {
-                                        context.go('/kid/today/$kidId');
-                                      } else {
-                                        context.go('/kid/select');
-                                      }
-                                    },
-                                    textSize: textSize,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          TextButton(
-                            onPressed: () async {
-                              final prefs = await SharedPreferences.getInstance();
-                              await prefs.remove('kidId');
-                              await prefs.remove('kidStayLoggedIn');
-                              if (!context.mounted) return;
-                              await context.read<AuthProvider>().signOut();
-                              if (!context.mounted) return;
-                              context.go('/auth');
-                            },
-                            child: const Text(
-                              'Log ud',
-                              style: TextStyle(
-                                color: Color(0xFFE8DCC8),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
+    final profile = await Supabase.instance.client
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+    final parentId = profile?['id'] as String?;
+
+    if (!mounted) return;
+    if (parentId == null) {
+      context.go('/admin');
+      return;
+    }
+
+    final kidsProbe = await Supabase.instance.client
+        .from('kids')
+        .select('id')
+        .eq('parent_id', parentId)
+        .limit(1);
+
+    if (!mounted) return;
+    final hasKids = (kidsProbe as List).isNotEmpty;
+    if (hasKids) {
+      context.go('/kid/select');
+    } else {
+      context.go('/admin');
+    }
   }
-}
-
-class _ModeButton extends StatelessWidget {
-  final String title;
-  final VoidCallback onTap;
-  final double textSize;
-
-  const _ModeButton({
-    required this.title,
-    required this.onTap,
-    required this.textSize,
-  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF8B7355).withValues(alpha: 0.9),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFD4A853), width: 1),
-          ),
-          child: Center(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: textSize,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFFE8DCC8),
-              ),
-            ),
-          ),
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFFF9C433),
         ),
       ),
     );

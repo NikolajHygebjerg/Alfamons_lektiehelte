@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/angreb_assets.dart';
 import '../../utils/card_assets.dart';
 import '../../widgets/duel_angreb_tile.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/alfamon_card.dart';
 import 'widgets/kid_session_nav_button.dart';
 
@@ -735,7 +736,7 @@ class _KidSpilScreenState extends State<KidSpilScreen> {
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(width: 48),
+                      const KidParentAdminCornerButton(),
                     ],
                   ),
                 ),

@@ -16,11 +16,13 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.2+3
+# Android/iOS: name = version før +, build/code = tal efter + (skal stige pr. Play/App Store-upload).
+version: 1.0.5
 
 environment:
   sdk: ^3.11.1
 
+# Web (kun admin): brug pubspec_web.yaml via tool/build_web_admin.sh — kopier nye dependencies derind uden alfamon_trace og uden assets.
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,
@@ -63,6 +65,15 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+# audioplayers_darwin 6.4.0 on pub.dev has invalid Swift (line 88: .AVAudioSession… on CategoryOptions).
+# Pin to upstream until a fixed release is published. See bluefireteam/audioplayers AudioContext.swift.
+dependency_overrides:
+  audioplayers_darwin:
+    git:
+      url: https://github.com/bluefireteam/audioplayers.git
+      path: packages/audioplayers_darwin
+      ref: 99d741c6c4d25554e3efbf6e7f01e3656bdca79c
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -113,5 +124,8 @@ flutter_launcher_icons:
   ios: true
   remove_alpha_ios: true # App Store kræver ikke gennemsigtighed på app-ikon
   macos:
+    generate: true
+    image_path: "assets/nytikon.png"
+  windows:
     generate: true
     image_path: "assets/nytikon.png"

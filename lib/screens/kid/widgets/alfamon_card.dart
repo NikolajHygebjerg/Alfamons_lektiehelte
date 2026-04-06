@@ -156,7 +156,7 @@ class _CardImageState extends State<_CardImage> {
     await _assetLookupInit;
   }
 
-  /// Prøver PNG, JPG, SVG i rækkefølge (PNG/JPG viser korrekt; SVG har flutter_svg-problemer).
+  /// Prøver WebP, PNG, JPG, SVG i rækkefølge (raster viser korrekt; SVG har flutter_svg-problemer).
   Future<String?> _resolveFirstAvailablePath(List<String> pathsToTry) async {
     for (final p in pathsToTry) {
       final resolved = await _resolveAssetPath(p);
@@ -166,7 +166,10 @@ class _CardImageState extends State<_CardImage> {
   }
 
   bool _isRasterPath(String path) =>
-      path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg');
+      path.endsWith('.webp') ||
+      path.endsWith('.png') ||
+      path.endsWith('.jpg') ||
+      path.endsWith('.jpeg');
 
   Future<String?> _resolveAssetPath(String requestedPath) async {
     if (_assetCache[requestedPath] == true) return requestedPath;
@@ -232,9 +235,9 @@ class _CardImageState extends State<_CardImage> {
       return _buildNetworkFallback(reason: 'ingen assetPath');
     }
 
-    // Prøv PNG, JPG først (viser korrekt); SVG har flutter_svg-problemer med base64-billeder
+    // Prøv WebP, PNG, JPG først (viser korrekt); SVG har flutter_svg-problemer med base64-billeder
     final basePath = assetPath.replaceAll('.svg', '');
-    final pathsToTry = ['$basePath.png', '$basePath.jpg', assetPath];
+    final pathsToTry = ['$basePath.webp', '$basePath.png', '$basePath.jpg', assetPath];
 
     return FutureBuilder<String?>(
       key: ValueKey(assetPath),
@@ -250,7 +253,7 @@ class _CardImageState extends State<_CardImage> {
               height: double.infinity,
               errorBuilder: (context, error, stackTrace) {
                 _log('image', 'Image.asset fejlede for $resolvedPath', error, stackTrace);
-                return _buildNetworkFallback(reason: 'png/jpg load fejl');
+                return _buildNetworkFallback(reason: 'raster load fejl');
               },
             );
           }

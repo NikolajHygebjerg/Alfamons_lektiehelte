@@ -153,13 +153,13 @@ class CardAssets {
     return path;
   }
 
-  /// Returnerer liste af asset-paths at prøve (PNG, JPG, SVG). Brug Image.asset for
-  /// PNG/JPG (viser korrekt); SvgPicture for SVG (flutter_svg har problemer med
+  /// Returnerer liste af asset-paths at prøve (WebP, PNG, JPG, SVG). Brug Image.asset for
+  /// raster (WebP/PNG/JPG); SvgPicture for SVG (flutter_svg har problemer med
   /// indlejrede base64-billeder i SVG).
   static List<String> getCardImagePathsToTry(String avatarName, int stageIndex, {String? letter}) {
     final svgPath = getCardAssetPath(avatarName, stageIndex, letter: letter);
     if (svgPath == null) return [];
     final basePath = svgPath.replaceAll('.svg', '');
-    return ['$basePath.png', '$basePath.jpg', svgPath];
+    return ['$basePath.webp', '$basePath.png', '$basePath.jpg', svgPath];
   }
 }

@@ -36,13 +36,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         title: const Text('Admin'),
         backgroundColor: const Color(0xFF5A1A0D),
         foregroundColor: Colors.white,
-        actions: [
-          const AdminMenuToolbarButton(),
-          TextButton.icon(
-            onPressed: () => context.go('/'),
-            icon: const Icon(Icons.logout, color: Colors.white, size: 20),
-            label: const Text('Log ud', style: TextStyle(color: Colors.white)),
-          ),
+        actions: const [
+          AdminMenuToolbarButton(),
         ],
       ),
       body: Container(
@@ -87,12 +82,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 subtitle: 'Byg Læs-let bøger til bogbutikken',
                 onTap: () => context.push('/admin/book-builder'),
               ),
-            _AdminTile(
-              icon: Icons.verified_user,
-              title: 'Godkend opgaver',
-              subtitle: 'Godkend afventende opgaver',
-              onTap: () => context.push('/admin/approvals'),
-            ),
             _AdminTile(
               icon: Icons.settings,
               title: 'Indstillinger',

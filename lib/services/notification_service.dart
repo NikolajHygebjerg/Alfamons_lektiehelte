@@ -16,6 +16,13 @@ class NotificationService {
       _initialized = true;
       return;
     }
+    // flutter_local_notifications er primært sat op til Android/iOS; Windows/Linux
+    // udelades for at undgå runtime-fejl ved show/initialize.
+    if (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      _initialized = true;
+      return;
+    }
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwin = DarwinInitializationSettings(
@@ -129,6 +136,10 @@ class NotificationService {
     required String body,
   }) async {
     if (kIsWeb) return;
+    if (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return;
+    }
     if (!_initialized) await init();
 
     const android = AndroidNotificationDetails(

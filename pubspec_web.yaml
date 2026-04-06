@@ -1,0 +1,63 @@
+# Bruges KUN til slank web-build (forælder-admin).
+# Kør: tool/build_web_admin.sh  (eller se docs/flutter-web-deploy.md)
+# Kopier manuelt ikke denne fil over pubspec.yaml uden at gendanne bagefter.
+name: alfamon_flutter
+description: "Web admin build — uden barn-assets og uden alfamon_trace."
+publish_to: 'none'
+version: 1.0.3+4
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # alfamon_trace udeladt — ellers pakkes ~100MB Assets/ fra trace med på web.
+  flutter_riverpod: ^2.6.1
+  audioplayers: ^6.1.0
+  just_audio: ^0.9.40
+  record: ^6.2.0
+  path_provider: ^2.1.0
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.10+1
+  supabase_flutter: ^2.8.0
+  go_router: ^14.2.0
+  provider: ^6.1.2
+  shared_preferences: ^2.2.2
+  flutter_local_notifications: ^18.0.1
+  file_picker: ^8.1.6
+  table_calendar: ^3.1.2
+  flutter_tts: ^4.2.1
+  url_launcher: ^6.3.2
+  app_settings: ^7.0.0
+  android_intent_plus: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.3
+  flutter_lints: ^6.0.0
+
+dependency_overrides:
+  audioplayers_darwin:
+    git:
+      url: https://github.com/bluefireteam/audioplayers.git
+      path: packages/audioplayers_darwin
+      ref: 99d741c6c4d25554e3efbf6e7f01e3656bdca79c
+
+flutter:
+  uses-material-design: true
+  # Ingen assets/ — ellers kopierer Flutter hele spil-biblioteket (~300MB+) ind i build/web.
+
+flutter_launcher_icons:
+  image_path: "assets/nytikon.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  macos:
+    generate: true
+    image_path: "assets/nytikon.png"
+  windows:
+    generate: true
+    image_path: "assets/nytikon.png"

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/audio_cache_service.dart';
 import '../../services/task_completion_service.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/gold_coins_earned_overlay.dart';
 
 /// Bog-læser for Læs-let bøger.
@@ -266,6 +267,11 @@ class _KidBookReaderScreenState extends State<KidBookReaderScreen> {
                 child: const Icon(Icons.close, size: 44, color: Colors.black87),
               ),
             ),
+          ),
+          const Positioned(
+            top: 24,
+            right: 16,
+            child: KidParentAdminCornerButton(),
           ),
           if (_flashGoldAmount != null)
             Positioned.fill(

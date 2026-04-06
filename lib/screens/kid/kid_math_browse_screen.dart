@@ -1,10 +1,13 @@
-import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/math_tasks_service.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
+import '../../utils/math_tutor_prerecorded_intro.dart';
 import 'kid_layout_constants.dart';
 import 'widgets/kid_gold_treasury_corner.dart';
 import 'widgets/kid_math_black_popup_card.dart';
@@ -35,11 +38,29 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
   /// [math_progress.next_task_index] for den viste mappe (0 hvis ingen mappe/opgaver).
   int _playNextIndex = 0;
   int _kidGoldCoins = 0;
+  final AudioPlayer _rootFolderHintPlayer = AudioPlayer();
+  int _loadSeq = 0;
+  /// Undgå gentagen auto-start ved refresh, når vi allerede er kommet tilbage fra Spil.
+  bool _didAutoStartPlayForThisFolder = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant KidMathBrowseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.folderId != widget.folderId) {
+      _didAutoStartPlayForThisFolder = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_rootFolderHintPlayer.dispose());
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -55,6 +76,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
       String title;
       if (widget.folderId == null) {
         folders = MathTasksService.visibleRootFolders(folderById, assigned);
+        folders = MathTasksService.orderedVisibleRootFolders(folders);
         title = 'Matematik';
       } else {
         folders = MathTasksService.visibleChildFolders(
@@ -91,6 +113,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
           .maybeSingle();
       final gold = (goldRow?['gold_coins'] as num?)?.toInt() ?? 0;
       if (!mounted) return;
+      final seq = ++_loadSeq;
       setState(() {
         _folders = folders;
         _taskCounts = counts;
@@ -100,6 +123,50 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
         _kidGoldCoins = gold;
         _loading = false;
       });
+      final folderFullySolvedNow =
+          widget.folderId != null && playN > 0 && nextIdx >= playN;
+      if (widget.folderId == null &&
+          folders.isNotEmpty &&
+          mounted &&
+          seq == _loadSeq) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted || seq != _loadSeq) return;
+          try {
+            await _rootFolderHintPlayer.stop();
+          } catch (_) {}
+          unawaited(mathTutorTryPlayAabenEnMappeNedenfor(_rootFolderHintPlayer));
+        });
+      }
+      if (widget.folderId != null &&
+          folders.isNotEmpty &&
+          !folderFullySolvedNow &&
+          mounted &&
+          seq == _loadSeq) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted || seq != _loadSeq) return;
+          try {
+            await _rootFolderHintPlayer.stop();
+          } catch (_) {}
+          unawaited(mathTutorTryPlayVaelgHvilkenOpgave(_rootFolderHintPlayer));
+        });
+      }
+      final leafWithTasks = widget.folderId != null &&
+          playN > 0 &&
+          !folderFullySolvedNow &&
+          folders.isEmpty;
+      if (leafWithTasks &&
+          !_didAutoStartPlayForThisFolder &&
+          mounted &&
+          seq == _loadSeq) {
+        final fid = widget.folderId!;
+        final k = widget.kidId;
+        final capturedSeq = seq;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || capturedSeq != _loadSeq) return;
+          _didAutoStartPlayForThisFolder = true;
+          context.push('/kid/math/$k/play/$fid');
+        });
+      }
     } catch (e, stack) {
       debugPrint('KidMathBrowseScreen._load: $e\n$stack');
       if (!mounted) return;
@@ -170,7 +237,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
   Widget _background() {
     return Positioned.fill(
       child: Image.asset(
-        'assets/baggrund_matematik2.png',
+        'assets/baggrund_matematik2.webp',
         fit: BoxFit.cover,
         filterQuality: FilterQuality.medium,
         errorBuilder: (_, _, _) => Container(
@@ -192,7 +259,75 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    String? imageAsset,
   }) {
+    final iconColor = color == const Color(0xFFF9C433)
+        ? Colors.black87
+        : const Color(0xFF1B4D3E);
+
+    // Rodmapper Plus/Minus/Dividere/Gange: kun asset-ikon, ingen hvid boks.
+    if (imageAsset != null) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 14),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            splashColor: Colors.white24,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: 160,
+                      maxHeight: 120,
+                    ),
+                    child: Image.asset(
+                      imageAsset,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.center,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (_, _, _) =>
+                          Icon(icon, size: 40, color: Colors.white),
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 100),
+                      child: Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          height: 1.15,
+                          color: Colors.white.withValues(alpha: 0.92),
+                          shadows: const [
+                            Shadow(
+                              offset: Offset(0, 1),
+                              blurRadius: 3,
+                              color: Colors.black54,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Material(
@@ -210,7 +345,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 28, color: color == const Color(0xFFF9C433) ? Colors.black87 : const Color(0xFF1B4D3E)),
+                  Icon(icon, size: 28, color: iconColor),
                   const SizedBox(height: 6),
                   Text(
                     title,
@@ -249,6 +384,54 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
     Shadow(offset: Offset(0, 1), blurRadius: 5, color: Colors.black54),
   ];
 
+  /// Undermapper + evt. Spil — vandret scroll, centreret når der er plads.
+  Widget _centeredFolderStrip(double viewportWidth) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kidZoneHorizontalPadding,
+        vertical: 8,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: viewportWidth - 2 * kidZoneHorizontalPadding),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (widget.folderId != null && _playTaskCount > 0)
+              _folderChip(
+                title: 'Spil',
+                subtitle: '$_playTaskCount opgaver',
+                icon: Icons.play_circle_filled,
+                color: const Color(0xFFF9C433),
+                onTap: () => context.push('/kid/math/${widget.kidId}/play/${widget.folderId}'),
+              ),
+            ..._folders.map((f) {
+              final id = f['id'] as String;
+              final t = f['title'] as String? ?? '';
+              final tc = _taskCounts[id] ?? 0;
+              final img = widget.folderId == null
+                  ? MathTasksService.kidIconAssetForMathFolderTitle(t)
+                  : null;
+              return _folderChip(
+                title: t,
+                subtitle: img != null
+                    ? (tc > 0 ? '$tc opgaver' : '')
+                    : (tc > 0 ? '$tc opgaver' : 'Mappe'),
+                icon: Icons.folder_open,
+                color: Colors.white.withValues(alpha: 0.95),
+                imageAsset: img,
+                onTap: () => context.push('/kid/math/${widget.kidId}/folder/$id'),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _mathBrowseTopBar(BuildContext context) {
     final title = _loading ? 'Matematik' : (_title ?? 'Matematik');
     return Padding(
@@ -277,7 +460,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 48),
+          const KidParentAdminCornerButton(),
         ],
       ),
     );
@@ -285,7 +468,7 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showBottomStrip = !_loading &&
+    final showFolderStrip = !_loading &&
         _loadError == null &&
         (_folders.isNotEmpty || (widget.folderId != null && _playTaskCount > 0));
 
@@ -326,185 +509,83 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
                                 ),
                               ),
                             )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  child: RefreshIndicator(
-                                    onRefresh: _load,
-                                    color: Colors.white,
-                      child: LayoutBuilder(
-                        builder: (ctx, constraints) {
-                          final solved = _folderFullySolved;
-                          return SingleChildScrollView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                                child: Column(
-                                  mainAxisAlignment:
-                                      solved ? MainAxisAlignment.center : MainAxisAlignment.start,
-                                  children: [
-                                    if (solved)
-                                      KidMathBlackPopupCard(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment: CrossAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              'Du har løst alle opgaver i denne mappe.',
-                                              textAlign: TextAlign.center,
-                                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                            ),
-                                            const SizedBox(height: 24),
-                                            FilledButton(
-                                              onPressed: _restartFolder,
-                                              style: FilledButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 28,
-                                                  vertical: 16,
-                                                ),
-                                                backgroundColor: const Color(0xFFF9C433),
-                                                foregroundColor: Colors.black87,
-                                              ),
-                                              child: const Text(
-                                                'Begynd forfra',
-                                                style: TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    else ...[
-                                      if (widget.folderId == null &&
-                                          _folders.isNotEmpty)
-                                        SizedBox(
-                                          height: math.max(
-                                            120.0,
-                                            constraints.maxHeight - 8,
-                                          ),
-                                          width: double.infinity,
-                                          child: const Center(
-                                            child: Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                horizontal: 24,
-                                              ),
-                                              child: Text(
-                                                'Åbn en mappe nedenfor.',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Colors.black,
-                                                  height: 1.25,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      if (_folders.isEmpty &&
-                                          widget.folderId != null &&
-                                          _playTaskCount == 0)
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 32),
-                                          child: Center(child: Text('Ingen opgaver her.')),
-                                        ),
-                                      if (_folders.isEmpty && widget.folderId == null)
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 48),
+                          : RefreshIndicator(
+                                onRefresh: _load,
+                                color: Colors.white,
+                                child: LayoutBuilder(
+                                  builder: (ctx, constraints) {
+                                    final solved = _folderFullySolved;
+                                    final w = constraints.maxWidth;
+                                    return SingleChildScrollView(
+                                      physics: const AlwaysScrollableScrollPhysics(),
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                                           child: Center(
-                                            child: Text(
-                                              'Din voksen skal oprette matematikmapper under Admin → Matematik.',
-                                              textAlign: TextAlign.center,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (solved)
+                                                  KidMathBlackPopupCard(
+                                                    child: Column(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                                      children: [
+                                                        Text(
+                                                          'Du har løst alle opgaver i denne mappe.',
+                                                          textAlign: TextAlign.center,
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .titleLarge
+                                                              ?.copyWith(
+                                                                color: Colors.white,
+                                                                fontWeight: FontWeight.w700,
+                                                              ),
+                                                        ),
+                                                        const SizedBox(height: 24),
+                                                        FilledButton(
+                                                          onPressed: _restartFolder,
+                                                          style: FilledButton.styleFrom(
+                                                            padding: const EdgeInsets.symmetric(
+                                                              horizontal: 28,
+                                                              vertical: 16,
+                                                            ),
+                                                            backgroundColor: const Color(0xFFF9C433),
+                                                            foregroundColor: Colors.black87,
+                                                          ),
+                                                          child: const Text(
+                                                            'Begynd forfra',
+                                                            style: TextStyle(
+                                                              fontSize: 18,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                else if (showFolderStrip)
+                                                  _centeredFolderStrip(w)
+                                                else if (_folders.isEmpty &&
+                                                    widget.folderId != null &&
+                                                    _playTaskCount == 0)
+                                                  const Text('Ingen opgaver her.')
+                                                else if (_folders.isEmpty && widget.folderId == null)
+                                                  const Text(
+                                                    'Din voksen skal oprette matematikmapper under Admin → Matematik.',
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                              ],
                                             ),
                                           ),
                                         ),
-                                      if (_folders.isNotEmpty && widget.folderId != null)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 24,
-                                            left: 8,
-                                            right: 8,
-                                          ),
-                                          child: Text(
-                                            _playTaskCount > 0
-                                                ? 'Åbn en mappe nedenfor – eller tryk Spil for opgaver i denne mappe.'
-                                                : 'Åbn en mappe nedenfor.',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.black,
-                                              height: 1.25,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ],
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  if (showBottomStrip)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(
-                        kidZoneHorizontalPadding,
-                        10,
-                        kidZoneHorizontalPadding,
-                        12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        border: Border(
-                          top: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        clipBehavior: Clip.hardEdge,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (widget.folderId != null && _playTaskCount > 0)
-                              _folderChip(
-                                title: 'Spil',
-                                subtitle: '$_playTaskCount opgaver',
-                                icon: Icons.play_circle_filled,
-                                color: const Color(0xFFF9C433),
-                                onTap: () => context.push('/kid/math/${widget.kidId}/play/${widget.folderId}'),
-                              ),
-                            ..._folders.map((f) {
-                              final id = f['id'] as String;
-                              final t = f['title'] as String? ?? '';
-                              final tc = _taskCounts[id] ?? 0;
-                              return _folderChip(
-                                title: t,
-                                subtitle: tc > 0 ? '$tc opgaver' : 'Mappe',
-                                icon: Icons.folder_open,
-                                color: Colors.white.withValues(alpha: 0.95),
-                                onTap: () => context.push('/kid/math/${widget.kidId}/folder/$id'),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
-                              ],
-                            ),
-                          ),
+                ),
                 ],
               ),
             ),
@@ -513,9 +594,12 @@ class _KidMathBrowseScreenState extends State<KidMathBrowseScreen> {
               _loadError == null)
             Positioned(
               right: kidZoneHorizontalPadding,
-              bottom: MediaQuery.paddingOf(context).bottom +
-                  (showBottomStrip ? 128 : 16),
-              child: KidGoldTreasuryCorner(goldCoins: _kidGoldCoins),
+              bottom: MediaQuery.paddingOf(context).bottom + 16,
+              child: KidGoldTreasuryCorner(
+                kidId: widget.kidId,
+                goldCoins: _kidGoldCoins,
+                onAfterAlfamonsRoute: _load,
+              ),
             ),
         ],
       ),

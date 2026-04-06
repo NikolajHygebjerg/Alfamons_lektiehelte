@@ -1,12 +1,12 @@
 {
-    "name": "alfamon_flutter",
-    "short_name": "alfamon_flutter",
+    "name": "Alfamons lektiehelte – admin",
+    "short_name": "Alfamon admin",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "landscape",
+    "description": "Forælder-administration. Barnet bruger Alfamon-appen på anden enhed.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

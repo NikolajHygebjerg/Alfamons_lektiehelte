@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -123,12 +124,25 @@ class _AuthScreenState extends State<AuthScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Baggrund – iPad eller iPhone design
+          // Web-admin: ingen SVG-assets (hurtigere load); native: design-baggrund.
           Positioned.fill(
-            child: SvgPicture.asset(
-              bgAsset,
-              fit: BoxFit.cover,
-            ),
+            child: kIsWeb
+                ? Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFF5A1A0D),
+                          Color(0xFFE85A4A),
+                        ],
+                      ),
+                    ),
+                  )
+                : SvgPicture.asset(
+                    bgAsset,
+                    fit: BoxFit.cover,
+                  ),
           ),
           // Overlay med interaktive elementer placeret på designet
           SafeArea(
@@ -279,7 +293,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             title: Text(
                               'Forbliv logget ind',
                               style: TextStyle(
-                                color: const Color(0xFFE8DCC8),
+                                color: Colors.black,
                                 fontSize: textSize,
                               ),
                             ),
@@ -323,7 +337,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             ? null
                             : () => setState(() => _isSignUp = !_isSignUp),
                         style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFE8DCC8),
+                          foregroundColor: Colors.black,
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -340,7 +354,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         TextButton(
                           onPressed: _isLoading ? null : _resetPassword,
                           style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFFE8DCC8),
+                            foregroundColor: Colors.black,
                             padding: const EdgeInsets.symmetric(vertical: 2),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/task.dart';
+import '../../services/kid_daily_task_instances_service.dart';
 import '../../services/task_completion_service.dart';
-import '../../utils/kid_task_instances.dart';
-import '../../utils/recurring_task_schedule.dart';
+import '../../widgets/kid_parent_admin_corner.dart';
 import 'kid_layout_constants.dart';
 import 'widgets/gold_coins_earned_overlay.dart';
 import 'widgets/kid_gold_treasury_corner.dart';
 import 'widgets/kid_session_nav_button.dart';
 
-/// Dagens opgaver – baggrund `Baggrundopgaver.svg`, opgaver øverst, kiste som på hjem.
+/// Dagens opgaver – baggrund `alfamonbaggrund.svg`, opgaver øverst, kiste som på hjem.
 class KidTasksScreen extends StatefulWidget {
   const KidTasksScreen({super.key, required this.kidId});
 
@@ -37,67 +36,10 @@ class _KidTasksScreenState extends State<KidTasksScreen> {
   }
 
   Future<void> _loadToday() async {
-    final now = DateTime.now();
-    final today = now.toIso8601String().substring(0, 10);
     final client = Supabase.instance.client;
-
-    final recurring = await client
-        .from('recurring_tasks')
-        .select(
-          'task_id,due_time,allow_upfront,per_day_count,schedule_mode,weekdays,specific_dates',
-        )
-        .eq('kid_id', widget.kidId);
-
-    final existing = await client
-        .from('task_instances')
-        .select('task_id')
-        .eq('kid_id', widget.kidId)
-        .eq('date', today);
-
-    final existingTaskIds = <String>{};
-    for (final e in existing as List) {
-      existingTaskIds.add(e['task_id'] as String);
-    }
-
-    final toCreate = <Map<String, dynamic>>[];
-    for (final rt in recurring as List) {
-      final row = Map<String, dynamic>.from(rt as Map);
-      if (!RecurringTaskSchedule.appliesToDate(row, now)) continue;
-      final tid = row['task_id'] as String;
-      if (existingTaskIds.contains(tid)) continue;
-      final perDay = row['per_day_count'] as int? ?? 1;
-      toCreate.add({
-        'task_id': tid,
-        'kid_id': widget.kidId,
-        'date': today,
-        'due_time': row['due_time'],
-        'allow_upfront': row['allow_upfront'] ?? false,
-        'status': 'pending',
-        'required_completions': perDay < 1 ? 1 : perDay,
-        'completions_done': 0,
-      });
-    }
-    if (toCreate.isNotEmpty) {
-      await client.from('task_instances').insert(toCreate);
-    }
-
-    final res = await client
-        .from('task_instances')
-        .select(
-          'id,task_id,kid_id,date,due_time,status,required_completions,completions_done,tasks(id,title,mode,points_fixed,points_per_unit,emoji)',
-        )
-        .eq('date', today)
-        .eq('kid_id', widget.kidId)
-        .order('due_time', ascending: true, nullsFirst: false);
-
-    final activeToday =
-        activeRecurringTaskIdsForDate(recurring as List, now);
-    final rawInstances = (res as List)
-        .map((e) => TaskInstance.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
-    final visible = filterAndDedupeInstancesForActiveRecurring(
-      rawInstances,
-      activeToday,
+    final visible =
+        await KidDailyTaskInstancesService.loadTodayVisibleInstances(
+      widget.kidId,
     );
 
     final goldRes = await client
@@ -269,8 +211,9 @@ class _KidTasksScreenState extends State<KidTasksScreen> {
         children: [
           Positioned.fill(
             child: SvgPicture.asset(
-              'assets/Baggrundopgaver.svg',
+              'assets/alfamonbaggrund.svg',
               fit: BoxFit.cover,
+              alignment: Alignment.center,
             ),
           ),
           SafeArea(
@@ -300,16 +243,17 @@ class _KidTasksScreenState extends State<KidTasksScreen> {
             child: KidSessionNavButton(kidId: widget.kidId),
           ),
           Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: kidZoneHorizontalPadding,
+            child: const KidParentAdminCornerButton(),
+          ),
+          Positioned(
             right: kidZoneHorizontalPadding,
             bottom: bottomInset + 12,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () =>
-                    context.push('/kid/alfamons/${widget.kidId}'),
-                borderRadius: BorderRadius.circular(12),
-                child: KidGoldTreasuryCorner(goldCoins: _goldCoins),
-              ),
+            child: KidGoldTreasuryCorner(
+              kidId: widget.kidId,
+              goldCoins: _goldCoins,
+              onAfterAlfamonsRoute: _loadToday,
             ),
           ),
           if (_flashGoldAmount != null)

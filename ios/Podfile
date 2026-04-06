@@ -1,5 +1,9 @@
 # iOS 13+ required by audioplayers_darwin (Swift Concurrency / Task)
 platform :ios, '13.0'
+# pubspec har git-override for audioplayers_darwin (pub.dev 6.4.0 har Swift-fejl). Hvis Xcode
+# stadig bygger fra ~/.pub-cache/hosted/.../audioplayers_darwin-6.4.0: kør fra projektrod
+# `flutter build ios --config-only` (eller slet ios/.symlinks og kør flutter pub get + pod install),
+# så ios/.symlinks/plugins peger på .pub-cache/git/...
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -43,6 +47,8 @@ post_install do |installer|
       config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
       # Align pods with app (must be ≥13.0 for audioplayers_darwin Swift concurrency)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      # Xcode 15+: avoid "double-quoted include in framework header" in third-party pods (e.g. SDWebImage).
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
     end
   end
 end

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -25,14 +26,14 @@ const String kIntroKanDuSelv = 'Kan du selv regne ud hvad svaret er skal du skri
 const String kIntroKanDuSelvAudioBasename =
     'kan_du_selv_regne_ud_hvad_svaret_er_skal_du_skrive_det_i_feltet_herunder_hvis_ikke_kan_du_trykke_videre';
 
-const String kIntroSvaretEr = 'Svaret er';
-
-/// Mønt 11–19 (foretrukket): `det_svarer_til_en_guldmoent_paa_ti_og` → ener-ciffer → `guldmoenter_paa_en` (ellers `enere`).
+/// Mønt 11–19 (foretrukket): `det_svarer_til_en_guldmoent_paa_ti_og` → ener-ciffer → **`guldmoent`** (1) / **`guldmoenter`** (2–9) → `paa_en`.
 /// I intro: `det_foerste_tal_er` / `det_andet_tal_er` + heltal afspilles før mønt-kæden.
-/// Alternativ: det_svarer_til → en/1 → guldmoent → … → enere.
-/// Tier 2–8: `det_svarer_til_{to…otte}_guldmoenter_paa_ti` (+ valgfri `guldmoenter_paa_en` ved én en) → ener → `enere`.
+/// Alternativ: det_svarer_til → en/1 → guldmoent (én tier-mønt) → … → enere.
+/// Tier 2–8: `det_svarer_til_{to…otte}_guldmoenter_paa_ti` → ener; derefter **1**: `en`→`guldmoent`→`paa_en`; **2–9**: tal→**`guldmoenter`**→`paa_en`.
 const String kCoinDetSvarerTil = 'det_svarer_til';
 const String kCoinGuldmoent = 'guldmoent';
+/// Efter ener-ciffer **2–9** («… på en»): **`guldmoenter.mp3`** (flertal).
+const String kCoinGuldmoenter = 'guldmoenter';
 /// Hvis `guldmoent.mp3` mangler, kan dette klip bruges i stedet («… guldmønt på ti og») — da udelades ekstra `paa_ti_og`.
 const String kCoinGuldmoentPaaTiOg = 'guldmoent_paa_ti_og';
 /// Ét klip: «Det svarer til en guldmønt på ti og» — derefter ener-ciffer + `enere`.
@@ -40,10 +41,10 @@ const String kCoinDetSvarerTilEnGuldmoentPaaTiOg =
     'det_svarer_til_en_guldmoent_paa_ti_og';
 /// Valgfrit **ét** klip for «Det svarer til en guldmønt.» uden «på ti og».
 const String kCoinDetSvarerTilEnGuldmoent = 'det_svarer_til_en_guldmoent';
-/// Valgfri bro før ener-ciffer **1** efter flere tier (`det_svarer_til_*_guldmoenter_paa_ti`).
-const String kCoinGuldmoenterPaaEn = 'guldmoenter_paa_en';
 /// Valgfrit mellem guldmønt og enere-ciffer («på ti og»).
 const String kCoinPaaTiOg = 'paa_ti_og';
+/// Efter `det_svarer_til` i 11–19 split-åbning: «på en» (fx `paa_en.mp3`).
+const String kCoinPaaEn = 'paa_en';
 /// **10** kr kun tier: «Det er en guldmønt på ti.»
 const String kCoinDetErEnGuldmoentPaaTi = 'det_er_en_guldmoent_paa_ti';
 
@@ -51,7 +52,675 @@ List<String> _coinGuldmoentClipCandidates() => [
       kCoinGuldmoent,
       kCoinGuldmoentPaaTiOg,
     ];
+
+/// Efter afspillet ener-antaller på ener-pladsen: **1** mønt → ental; **2–9** → flertal (`guldmoenter`).
+List<String> _coinGuldmoentClipCandidatesForOnesCount(int onesDigit) {
+  if (onesDigit < 1 || onesDigit > 9) {
+    return _coinGuldmoentClipCandidates();
+  }
+  if (onesDigit == 1) {
+    return _coinGuldmoentClipCandidates();
+  }
+  return [
+    kCoinGuldmoenter,
+    mathTutorAudioFilenameSlug('guldmønter'),
+    ..._coinGuldmoentClipCandidates(),
+  ];
+}
+
+List<String> _coinPaaEnClipCandidates() => [
+      kCoinPaaEn,
+      mathTutorAudioFilenameSlug('paa en'),
+      mathTutorAudioFilenameSlug('på en'),
+    ];
+
 const String kCoinEnereWord = 'enere';
+
+// --- Minus: pladsværdi-forklaring (efter forkert svar / «videre») ---
+
+const String kMinusDerEr = 'der_er';
+/// Efter korrekt ener-svar (uden lån): «Så går vi til tierne, der er …».
+const String kMinusSaaGaarViTilTierneDerEr = 'saa_gaar_vi_til_tierne_der_er';
+const String kMinusHvisDuBruger = 'hvis_du_bruger';
+const String kMinusHvorMangeEnereSaaTilbage =
+    'hvor_mange_enere_har_du_saa_tilbage';
+const String kMinusHvorMangeTiereSaaTilbage =
+    'hvor_mange_tiere_har_du_saa_tilbage';
+
+// --- Minus: lån (tier → enere) ---
+const String kMinusManglerDuJo = 'mangler_du_jo';
+const String kMinusDuHarForFaaEnere = 'du_har_for_faa_enere_til_at_traekke';
+const String kMinusFraWord = 'fra';
+const String kMinusFraDuSkalHaveFlereEnere = 'fra_du_skal_have_flere_enere';
+const String kMinusDuSkalHaveFlereEnere = 'du_skal_have_flere_enere';
+const String kMinusViTager = 'vi_tager';
+const String kMinusEnTierFraTierne = 'en_tier_fra_tierne';
+const String kMinusNuHarDuNokEnere = 'nu_har_du_nok_enere';
+const String kMinusNuKanDuTraekkeEnereFra = 'nu_kan_du_traekke_enere_fra';
+const String kMinusEnereFra = 'enere_fra';
+const String kMinusFaarDuAntalEnere = 'faar_du_antal_enere';
+const String kMinusHvorMangeEnereErDer = 'hvor_mange_enere_er_der';
+const String kMinusTierneErEnMindre = 'tierne_er_en_mindre';
+const String kMinusPaaTierpladsenErDerNu = 'paa_tierpladsen_er_der_nu';
+
+List<String> _minusSaaGaarViTilTierneDerErCandidates() => [
+      kMinusSaaGaarViTilTierneDerEr,
+      mathTutorAudioFilenameSlug('så går vi til tierne der er'),
+    ];
+
+List<String> _minusHvisDuBrugerCandidates() => [
+      kMinusHvisDuBruger,
+      mathTutorAudioFilenameSlug('hvis du bruger'),
+      mathTutorAudioFilenameSlug('hvis du bruger.'),
+    ];
+
+List<String> _minusManglerDuJoCandidates() => [
+      kMinusManglerDuJo,
+      mathTutorAudioFilenameSlug('mangler du jo'),
+      mathTutorAudioFilenameSlug('mangler du jo.'),
+    ];
+
+List<String> _minusFraWordCandidates() => [
+      kMinusFraWord,
+      mathTutorAudioFilenameSlug('fra'),
+      mathTutorAudioFilenameSlug('fra.'),
+    ];
+
+List<String> _minusDuSkalHaveFlereEnereCandidates() => [
+      kMinusDuSkalHaveFlereEnere,
+      kMinusFraDuSkalHaveFlereEnere,
+      mathTutorAudioFilenameSlug('du skal have flere enere'),
+      mathTutorAudioFilenameSlug('fra du skal have flere enere'),
+    ];
+
+List<String> _minusEnTierFraTierneCandidates() => [
+      kMinusEnTierFraTierne,
+      mathTutorAudioFilenameSlug('en tier fra tierne'),
+      mathTutorAudioFilenameSlug('en tier fra tierne.'),
+    ];
+
+List<String> _minusNuKanDuTraekkeCandidates() => [
+      'nu_kan_du_traekke',
+      kMinusNuKanDuTraekkeEnereFra,
+      mathTutorAudioFilenameSlug('nu kan du trække'),
+      mathTutorAudioFilenameSlug('nu kan du trække enere fra'),
+    ];
+
+List<String> _minusEnereFraCandidates() => [
+      kMinusEnereFra,
+      mathTutorAudioFilenameSlug('enere fra'),
+      mathTutorAudioFilenameSlug('enere fra.'),
+    ];
+
+List<String> _minusFaarDuAntalEnereCandidates() => [
+      kMinusFaarDuAntalEnere,
+      mathTutorAudioFilenameSlug('får du antal enere'),
+      mathTutorAudioFilenameSlug('faar du antal enere'),
+    ];
+
+List<String> _minusHvorMangeEnereErDerCandidates() => [
+      kMinusHvorMangeEnereErDer,
+      mathTutorAudioFilenameSlug('hvor mange enere er der'),
+      mathTutorAudioFilenameSlug('hvor mange enere er der.'),
+    ];
+
+List<String> _minusEnereTilbageCandidates() => [
+      kMinusHvorMangeEnereSaaTilbage,
+      mathTutorAudioFilenameSlug(
+        'Hvor mange enere har du så tilbage',
+      ),
+      mathTutorAudioFilenameSlug(
+        'Hvor mange enere har du så tilbage.',
+      ),
+    ];
+
+List<String> _minusTiereTilbageCandidates() => [
+      kMinusHvorMangeTiereSaaTilbage,
+      mathTutorAudioFilenameSlug(
+        'Hvor mange tiere har du så tilbage',
+      ),
+      mathTutorAudioFilenameSlug(
+        'Hvor mange tiere har du så tilbage.',
+      ),
+    ];
+
+List<String> _minusTierneErEnMindreCandidates() => [
+      kMinusTierneErEnMindre,
+      mathTutorAudioFilenameSlug('tierne er en mindre'),
+    ];
+
+List<String> _minusPaaTierpladsenCandidates() => [
+      kMinusPaaTierpladsenErDerNu,
+      mathTutorAudioFilenameSlug('paa tierpladsen er der nu'),
+      mathTutorAudioFilenameSlug('på tierpladsen er der nu'),
+    ];
+
+List<String> _minusViStarterMedEnerneCandidates() => [
+      'vi_starter_med_enerne_det_vil_sige',
+      mathTutorAudioFilenameSlug('Vi starter med enerne det vil sige.'),
+      mathTutorAudioFilenameSlug('Vi starter med enerne det vil sige'),
+    ];
+
+List<String> _minusDetKanIkkeLaaneEnTierCandidates() => [
+      'det_kan_vi_ikke_for_saa_bliver_det_et_minus_tal_vi_maa_derfor_laane_en_tier',
+      mathTutorAudioFilenameSlug(
+        'det kan vi ikke for så bliver det et minus tal vi må derfor låne en tier',
+      ),
+      mathTutorAudioFilenameSlug(
+        'det kan vi ikke for saa bliver det et minus tal vi maa derfor laane en tier',
+      ),
+    ];
+
+List<String> _minusViVekslerTierTilTiEnereCandidates() => [
+      'vi_veksler_en_tier_til_ti_enere',
+      mathTutorAudioFilenameSlug('vi veksler en tier til ti enere'),
+      mathTutorAudioFilenameSlug('Vi veksler en tier til ti enere.'),
+    ];
+
+List<String> _minusSaaHarViCandidates() => [
+      'saa_har_vi',
+      mathTutorAudioFilenameSlug('så har vi'),
+      mathTutorAudioFilenameSlug('Så har vi.'),
+    ];
+
+List<String> _minusSkrivSvaretIBoksenCandidates() => [
+      'skriv_svaret_i_boksen',
+      mathTutorAudioFilenameSlug('skriv svaret i boksen'),
+      mathTutorAudioFilenameSlug('Skriv svaret i boksen.'),
+    ];
+
+List<String> _minusDuSkalAltsaaTraekkeCandidates() => [
+      'du_skal_altsaa_traekke',
+      mathTutorAudioFilenameSlug('du skal altså trække'),
+      mathTutorAudioFilenameSlug('Du skal altså trække.'),
+    ];
+
+List<String> _minusGuldmoenterFraCandidates() => [
+      'guldmoenter_fra',
+      mathTutorAudioFilenameSlug('guldmoenter fra'),
+      mathTutorAudioFilenameSlug('guldmønter fra'),
+    ];
+
+List<String> _minusTrykPaaCandidates() => [
+      'Tryk_paa',
+      'tryk_paa',
+      mathTutorAudioFilenameSlug('Tryk på'),
+      mathTutorAudioFilenameSlug('tryk på'),
+      mathTutorAudioFilenameSlug('Tryk på.'),
+    ];
+
+List<String> _minusGuldmoenterForAtFjerneCandidates() => [
+      'guldmoenter_for_at_fjerne_dem_og_se_resultatet',
+      mathTutorAudioFilenameSlug(
+        'guldmoenter for at fjerne dem og se resultatet',
+      ),
+      mathTutorAudioFilenameSlug(
+        'guldmønter for at fjerne dem og se resultatet',
+      ),
+    ];
+
+List<String> _minusDerVarCandidates() => [
+      'der_var',
+      mathTutorAudioFilenameSlug('der var'),
+      mathTutorAudioFilenameSlug('Der var.'),
+    ];
+
+List<String> _minusTiereWordCandidates() => [
+      'tiere',
+      mathTutorAudioFilenameSlug('tiere'),
+      mathTutorAudioFilenameSlug('Tiere.'),
+    ];
+
+List<String> _minusMenViBrugteDenEneCandidates() => [
+      'men_vi_brugte_den_ene_saa_nu_er_der_kun',
+      mathTutorAudioFilenameSlug(
+        'men vi brugte den ene så nu er der kun',
+      ),
+      mathTutorAudioFilenameSlug(
+        'men vi brugte den ene saa nu er der kun',
+      ),
+    ];
+
+List<String> _minusSvaretErClipCandidates() => [
+      'svaret_er',
+      mathTutorAudioFilenameSlug('svaret er'),
+      mathTutorAudioFilenameSlug('Svaret er.'),
+    ];
+
+List<String> _minusGodtGaaetClipCandidates() => [
+      'godt_gaaet',
+      mathTutorAudioFilenameSlug('godt gået'),
+      mathTutorAudioFilenameSlug('Godt gået.'),
+    ];
+
+/// Efter korrekt tier-svar ved minus med lån: «svaret er» → svar-tal → «godt gået».
+Future<bool> mathTutorTryPlayMinusBorrowFinalResultPraise({
+  required AudioPlayer player,
+  required int expectedAnswer,
+}) async {
+  if (expectedAnswer < 0 || expectedAnswer > 100) {
+    return false;
+  }
+  try {
+    Future<void> gap() =>
+        Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+    await _playFirstOf(player, _minusSvaretErClipCandidates());
+    await gap();
+    await _playNumberClips(player, expectedAnswer);
+    await gap();
+    await _playFirstOf(player, _minusGodtGaaetClipCandidates());
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus afslutning svaret er: $e\n$st');
+    return false;
+  }
+}
+
+Future<void> _minusOnesSimpleGuidedChain({
+  required AudioPlayer player,
+  required int minuendOnes,
+  required int subtrahendOnes,
+}) async {
+  Future<void> gap() =>
+      Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+  await _playFirstOf(player, [kMinusDerEr]);
+  await gap();
+  await _playNumberClips(player, minuendOnes);
+  await gap();
+  await _playFirstOf(player, _minusHvisDuBrugerCandidates());
+  await gap();
+  await _playNumberClips(player, subtrahendOnes);
+  await gap();
+  await _playFirstOf(player, _minusEnereTilbageCandidates());
+}
+
+Future<void> _minusOnesBorrowGuidedChain({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  Future<void> Function()? afterEnTierFraTierne,
+}) async {
+  final ao = operandLeft % 10;
+  final bo = operandRight % 10;
+  final adj = 10 + ao;
+  Future<void> gap() =>
+      Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+  await _playFirstOf(player, [kMinusDerEr]);
+  await gap();
+  await _playNumberClips(player, ao);
+  await gap();
+  await _playFirstOf(player, _minusHvisDuBrugerCandidates());
+  await gap();
+  await _playNumberClips(player, bo);
+  await gap();
+  await _playFirstOf(player, _minusManglerDuJoCandidates());
+  await gap();
+  await _playNumberClips(player, ao);
+  await gap();
+  await _playFirstOf(player, [
+    kMinusDuHarForFaaEnere,
+    mathTutorAudioFilenameSlug(
+      'du har for faa enere til at trække',
+    ),
+  ]);
+  await gap();
+  await _playNumberClips(player, ao);
+  await gap();
+  await _playFirstOf(player, _minusFraWordCandidates());
+  await gap();
+  await _playNumberClips(player, bo);
+  await gap();
+  await _playFirstOf(player, _minusDuSkalHaveFlereEnereCandidates());
+  await gap();
+  await _playFirstOf(player, [
+    kMinusViTager,
+    mathTutorAudioFilenameSlug('vi tager'),
+  ]);
+  await gap();
+  await _playFirstOf(player, _minusEnTierFraTierneCandidates());
+  if (afterEnTierFraTierne != null) {
+    await afterEnTierFraTierne();
+  }
+  await gap();
+  await _playFirstOf(player, [
+    kMinusNuHarDuNokEnere,
+    mathTutorAudioFilenameSlug('nu har du nok enere'),
+  ]);
+  await gap();
+  await _playFirstOf(player, _minusNuKanDuTraekkeCandidates());
+  await gap();
+  await _playNumberClips(player, bo);
+  await gap();
+  await _playFirstOf(player, _minusEnereFraCandidates());
+  await gap();
+  await _playNumberClips(player, adj);
+  await gap();
+  await _playFirstOf(player, _minusFaarDuAntalEnereCandidates());
+  await gap();
+  await _playFirstOf(player, _minusHvorMangeEnereErDerCandidates());
+}
+
+Future<void> _minusOnesBorrowDetailedWalkChain({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  Future<void> Function(int step)? onVisualStep,
+}) async {
+  final ao = operandLeft % 10;
+  final bo = operandRight % 10;
+  final adj = 10 + ao;
+  Future<void> gap() =>
+      Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+  if (onVisualStep != null) {
+    await onVisualStep(0);
+  }
+  await _playFirstOf(player, _minusViStarterMedEnerneCandidates());
+  await gap();
+  await _playNumberClips(player, ao);
+  await gap();
+  await _playFirstOf(player, _minusFiles());
+  await gap();
+  await _playNumberClips(player, bo);
+  await gap();
+  await _playFirstOf(player, _minusDetKanIkkeLaaneEnTierCandidates());
+  if (onVisualStep != null) {
+    await onVisualStep(1);
+  }
+  await gap();
+  await _playFirstOf(player, _minusViVekslerTierTilTiEnereCandidates());
+  if (onVisualStep != null) {
+    await onVisualStep(2);
+  }
+  await gap();
+  await _playFirstOf(player, _minusSaaHarViCandidates());
+  await gap();
+  await _playNumberClips(player, adj);
+  if (onVisualStep != null) {
+    await onVisualStep(3);
+  }
+  await gap();
+  await _playFirstOf(player, _minusFiles());
+  await gap();
+  await _playNumberClips(player, bo);
+  await gap();
+  await _playFirstOf(player, _minusSkrivSvaretIBoksenCandidates());
+}
+
+/// Minus enere (uden lån): `der_er` → ener-cifre → `hvis_du_bruger` → … → `hvor_mange_enere_har_du_saa_tilbage`.
+Future<bool> mathTutorTryPlayMinusOnesExplanation({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  try {
+    await _minusOnesSimpleGuidedChain(
+      player: player,
+      minuendOnes: operandLeft % 10,
+      subtrahendOnes: operandRight % 10,
+    );
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus enere-kæde: $e\n$st');
+    return false;
+  }
+}
+
+/// Minus enere **uden** lån (ener − ener går ud): `vi_starter_med_enerne` → ener → `minus` → ener — før interaktive mønter.
+Future<bool> mathTutorTryPlayMinusOnesNoBorrowViStarterOpening({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  if (mathTutorMinusNeedsBorrowTenToOnes(operandLeft, operandRight)) {
+    return false;
+  }
+  try {
+    final ao = operandLeft % 10;
+    final bo = operandRight % 10;
+    Future<void> gap() =>
+        Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+    await _playFirstOf(player, _minusViStarterMedEnerneCandidates());
+    await gap();
+    await _playNumberClips(player, ao);
+    await gap();
+    await _playFirstOf(player, _minusFiles());
+    await gap();
+    await _playNumberClips(player, bo);
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus enere uden lån vi starter: $e\n$st');
+    return false;
+  }
+}
+
+/// Minus **tiere** uden lån efter korrekt ener-svar:
+/// `saa_gaar_vi_til_tierne_der_er` → [minuend tier-ciffer] → `minus` → [subtrahend tier-ciffer].
+Future<bool> mathTutorTryPlayMinusNoBorrowTensAfterOnesOpening({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  if (mathTutorMinusNeedsBorrowTenToOnes(operandLeft, operandRight)) {
+    return false;
+  }
+  try {
+    final at = operandLeft ~/ 10;
+    final bt = operandRight ~/ 10;
+    Future<void> gap() =>
+        Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+    await _playFirstOf(player, _minusSaaGaarViTilTierneDerErCandidates());
+    await gap();
+    await _playNumberClips(player, at);
+    await gap();
+    await _playFirstOf(player, _minusFiles());
+    await gap();
+    await _playNumberClips(player, bt);
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus tier uden lån efter ener: $e\n$st');
+    return false;
+  }
+}
+
+/// Minus enere med lån: vekslingsgennemgang (ener + tier + 10 enere + «så har vi» + slutspørgsmål).
+Future<bool> mathTutorTryPlayMinusBorrowOnesDetailedWalkthrough({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  Future<void> Function(int step)? onVisualStep,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  if (!mathTutorMinusNeedsBorrowTenToOnes(operandLeft, operandRight)) {
+    return false;
+  }
+  try {
+    await _minusOnesBorrowDetailedWalkChain(
+      player: player,
+      operandLeft: operandLeft,
+      operandRight: operandRight,
+      onVisualStep: onVisualStep,
+    );
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus lån detaljeret: $e\n$st');
+    return false;
+  }
+}
+
+/// Interaktivt ener-trin efter lån: spoken vejledning til at trykke mønter væk (ingen tekst på skærmen).
+Future<bool> mathTutorTryPlayMinusBorrowInteractiveOnesInstruction({
+  required AudioPlayer player,
+  required int subtrahendOnes,
+}) async {
+  if (subtrahendOnes < 0 || subtrahendOnes > 9) {
+    return false;
+  }
+  try {
+    Future<void> gap() =>
+        Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+    await _playFirstOf(player, _minusDuSkalAltsaaTraekkeCandidates());
+    await gap();
+    await _playNumberClips(player, subtrahendOnes);
+    await gap();
+    await _playFirstOf(player, _minusGuldmoenterFraCandidates());
+    await gap();
+    await _playFirstOf(player, _minusTrykPaaCandidates());
+    await gap();
+    await _playNumberClips(player, subtrahendOnes);
+    await gap();
+    await _playFirstOf(player, _minusGuldmoenterForAtFjerneCandidates());
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus interaktiv ener-instruktion: $e\n$st');
+    return false;
+  }
+}
+
+Future<void> _minusBorrowTensAfterOnesWalkChain({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  Future<void> Function(int step)? onVisualStep,
+}) async {
+  final a0 = operandLeft ~/ 10;
+  final a1 = operandLeft ~/ 10 - 1;
+  final bt = operandRight ~/ 10;
+  Future<void> gap() =>
+      Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+  await _playFirstOf(player, _minusDerVarCandidates());
+  await gap();
+  await _playNumberClips(player, a0);
+  await gap();
+  await _playFirstOf(player, _minusTiereWordCandidates());
+  await gap();
+  await _playFirstOf(player, _minusMenViBrugteDenEneCandidates());
+  if (onVisualStep != null) {
+    await onVisualStep(1);
+  }
+  await gap();
+  await _playNumberClips(player, a1);
+  await gap();
+  await _playFirstOf(player, _minusFiles());
+  await gap();
+  await _playNumberClips(player, bt);
+  await gap();
+  await _playFirstOf(player, _minusSkrivSvaretIBoksenCandidates());
+}
+
+/// Efter korrekt ener-svar ved lån: tier med gennemstregning → [minuend tiere] − [subtrahend tiere] + skriv svar.
+Future<bool> mathTutorTryPlayMinusBorrowTensAfterOnesWalkthrough({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  Future<void> Function(int step)? onVisualStep,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  if (!mathTutorMinusNeedsBorrowTenToOnes(operandLeft, operandRight)) {
+    return false;
+  }
+  if (operandLeft ~/ 10 < 1) {
+    return false;
+  }
+  try {
+    await _minusBorrowTensAfterOnesWalkChain(
+      player: player,
+      operandLeft: operandLeft,
+      operandRight: operandRight,
+      onVisualStep: onVisualStep,
+    );
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus tier efter ener: $e\n$st');
+    return false;
+  }
+}
+
+/// Minus enere med lån (én-tier → enere): én sammenhængende lydfil-kæde som i tutor-teksten.
+Future<bool> mathTutorTryPlayMinusOnesBorrowFullChain({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  Future<void> Function()? afterEnTierFraTierne,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  try {
+    await _minusOnesBorrowGuidedChain(
+      player: player,
+      operandLeft: operandLeft,
+      operandRight: operandRight,
+      afterEnTierFraTierne: afterEnTierFraTierne,
+    );
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus enere lån-kæde: $e\n$st');
+    return false;
+  }
+}
+
+/// Minus tier-kæde (samme mønster som enere). [useBorrowTierPreamble]: efter lån på enerplads.
+Future<bool> mathTutorTryPlayMinusTensExplanation({
+  required AudioPlayer player,
+  required int operandLeft,
+  required int operandRight,
+  bool useBorrowTierPreamble = false,
+}) async {
+  if (operandLeft < 0 || operandLeft > 100 || operandRight < 0 || operandRight > 100) {
+    return false;
+  }
+  try {
+    Future<void> gap() =>
+        Future<void>.delayed(kMathTutorNumberToCoinPause);
+
+    final aTens = useBorrowTierPreamble
+        ? operandLeft ~/ 10 - 1
+        : operandLeft ~/ 10;
+    final bTens = operandRight ~/ 10;
+
+    if (useBorrowTierPreamble) {
+      await _playFirstOf(player, _minusTierneErEnMindreCandidates());
+      await gap();
+      await _playFirstOf(player, _minusPaaTierpladsenCandidates());
+      await gap();
+    }
+
+    await _playFirstOf(player, [kMinusDerEr]);
+    await gap();
+    await _playNumberClips(player, aTens);
+    await gap();
+    await _playFirstOf(player, _minusHvisDuBrugerCandidates());
+    await gap();
+    await _playNumberClips(player, bTens);
+    await gap();
+    await _playFirstOf(player, _minusTiereTilbageCandidates());
+    return true;
+  } catch (e, st) {
+    debugPrint('mathTutor minus tiere-kæde: $e\n$st');
+    return false;
+  }
+}
 
 /// Guidet trin: «Godt det giver altså» derefter svar-tal.
 const String kGuidedGodtDetGiverAltsaa = 'godt_det_giver_altsaa';
@@ -62,11 +731,59 @@ const String kGuidedNejIkkeRigtigtProevIgen = 'nej_det_er_ikke_rigtigt_proev_ige
 /// Forkert svar uden matematikhjælp: `oev_proev_igen.mp3` (kort «øv, prøv igen»).
 const String kOevProevIgen = 'oev_proev_igen';
 
+/// Første matematikskærm (rod): «åbn en mappe nedenfor».
+const String kAabenEnMappeNedenfor = 'aaben_en_mappe_nedenfor';
+
+/// Mappe med undermapper/opgaver: vælg hvilken opgave.
+const String kVaelgHvilkenOpgave = 'vaelg_hvilken_opgave';
+
 /// Ord-klip (ét ord i filnavnet).
 const String kWordSkriv = 'skriv';
 const String kWordEn = 'en';
 /// Mellem talsprog dele, fx *fem* **og** *tyve* (25).
 const String kWordOg = 'og';
+
+/// Efter ener-ciffer (1–9) i «det svarer til … på ti»-kæden: **`guldmoent`** (1) eller **`guldmoenter`** (2–9) → **paa_en**.
+Future<bool> _coinDetSvarerTilOnesTailAssetsPresent(int onesDigit) async {
+  if (onesDigit < 1 || onesDigit > 9) {
+    return false;
+  }
+  if (await _firstExistingBasename(_coinPaaEnClipCandidates()) == null) {
+    return false;
+  }
+  for (final part in mathTutorNumberPlayBasenames(onesDigit)) {
+    if (await _firstExistingBasename(_digitClipCandidates(part)) == null) {
+      return false;
+    }
+  }
+  return await _firstExistingBasename(
+        _coinGuldmoentClipCandidatesForOnesCount(onesDigit),
+      ) !=
+      null;
+}
+
+/// Kalds **efter** `_playNumberClips(ones)` (1–9).
+Future<void> _playCoinDetSvarerTilOnesTailAfterDigit(
+  AudioPlayer player,
+  int onesDigit,
+) async {
+  Future<void> gap() =>
+      Future<void>.delayed(kMathTutorNumberToCoinPause);
+  await _playFirstOf(
+    player,
+    _coinGuldmoentClipCandidatesForOnesCount(onesDigit),
+  );
+  await gap();
+  await _playFirstOf(player, _coinPaaEnClipCandidates());
+}
+
+/// Efter vist **antal ener-mønter** (én-plads): **1** → `en`/`en.mp3` først, derefter `enere` hvis `en` mangler.
+List<String> _coinEnereUnitWordCandidates(int onesOrEnereCount0to9) {
+  if (onesOrEnereCount0to9 == 1) {
+    return [kWordEn, 'en', kCoinEnereWord, 'enere'];
+  }
+  return [kCoinEnereWord, 'enere'];
+}
 
 /// Mente: «Det giver …» + midt (10 / 11 / 12–18) — flere klip for 12–18.
 const String kMenteDetGiver = 'det_giver';
@@ -176,6 +893,10 @@ String? mathTutorSingleNumberBasename(int n) {
     return '$n';
   }
   if (n <= 20) {
+    return '$n';
+  }
+  /// Hele tal som ét klip: `21.mp3` … `39.mp3` (40 via `n % 10 == 0`).
+  if (n >= 21 && n <= 39) {
     return '$n';
   }
   if (n == 100) {
@@ -294,16 +1015,7 @@ Future<bool> _coin11to19FluentChainPresent(int value) async {
     return false;
   }
   final ones = value % 10;
-  for (final part in mathTutorNumberPlayBasenames(ones)) {
-    if (await _firstExistingBasename(_digitClipCandidates(part)) == null) {
-      return false;
-    }
-  }
-  if (await _firstExistingBasename([kCoinGuldmoenterPaaEn, kCoinEnereWord]) ==
-      null) {
-    return false;
-  }
-  return true;
+  return _coinDetSvarerTilOnesTailAssetsPresent(ones);
 }
 
 Future<void> _playCoin11to19FluentChain(AudioPlayer player, int value) async {
@@ -312,7 +1024,7 @@ Future<void> _playCoin11to19FluentChain(AudioPlayer player, int value) async {
   await Future<void>.delayed(kMathTutorNumberToCoinPause);
   await _playNumberClips(player, ones);
   await Future<void>.delayed(kMathTutorNumberToCoinPause);
-  await _playFirstOf(player, [kCoinGuldmoenterPaaEn, kCoinEnereWord]);
+  await _playCoinDetSvarerTilOnesTailAfterDigit(player, ones);
 }
 
 /// `det_svarer_til_to_guldmoenter_paa_ti` … `det_svarer_til_otte_guldmoenter_paa_ti` (tier 2–8).
@@ -351,34 +1063,48 @@ Future<bool> _coinMultiTenWithOnesAssetsPresent(int tens, int ones) async {
   if (open == null || await _firstExistingBasename([open]) == null) {
     return false;
   }
-  if (await _firstExistingBasename([kCoinEnereWord]) == null) {
-    return false;
-  }
-  for (final part in mathTutorNumberPlayBasenames(ones)) {
-    if (await _firstExistingBasename(_digitClipCandidates(part)) == null) {
+  if (ones == 1) {
+    if (await _coinWordEnOrDigitOneBasename() == null) {
       return false;
     }
   }
-  return true;
+  return _coinDetSvarerTilOnesTailAssetsPresent(ones);
 }
 
 Future<void> _playCoinMultiTenWithOnesComposite(
   AudioPlayer player,
   int value,
 ) async {
+  Future<void> gap() =>
+      Future<void>.delayed(kMathTutorNumberToCoinPause);
   final tens = value ~/ 10;
   final ones = value % 10;
   final open = _coinMultiTenOpeningBasename(tens)!;
   await _playFirstOf(player, [open]);
-  await Future<void>.delayed(kMathTutorNumberToCoinPause);
-  final paaEn = await _firstExistingBasename([kCoinGuldmoenterPaaEn]);
-  if (paaEn != null && ones == 1) {
-    await _playBasename(player, paaEn);
-    await Future<void>.delayed(kMathTutorNumberToCoinPause);
+  await gap();
+  if (ones == 1) {
+    final enB = await _coinWordEnOrDigitOneBasename();
+    if (enB == null) {
+      throw StateError('Matematiktutor 21–91: mangler en/1 til ener-plads');
+    }
+    await _playBasename(player, enB);
+    await gap();
+    await _playFirstOf(
+      player,
+      _coinGuldmoentClipCandidatesForOnesCount(ones),
+    );
+    await gap();
+    await _playFirstOf(player, _coinPaaEnClipCandidates());
+    return;
   }
   await _playNumberClips(player, ones);
-  await Future<void>.delayed(kMathTutorNumberToCoinPause);
-  await _playFirstOf(player, [kCoinEnereWord]);
+  await gap();
+  await _playFirstOf(
+    player,
+    _coinGuldmoentClipCandidatesForOnesCount(ones),
+  );
+  await gap();
+  await _playFirstOf(player, _coinPaaEnClipCandidates());
 }
 
 /// «en» som ord eller som cifferet 1 (mange mapper har kun `1.mp3`).
@@ -423,11 +1149,14 @@ Future<bool> _coin11to19OpeningPresent() async {
       null;
 }
 
-Future<bool> _coinComposite11To19AssetsPresent() async {
-  if (await _firstExistingBasename([kCoinEnereWord]) == null) {
+Future<bool> _coinComposite11To19AssetsPresent(int value) async {
+  if (value < 11 || value > 19) {
     return false;
   }
-  return _coin11to19OpeningPresent();
+  if (!await _coin11to19OpeningPresent()) {
+    return false;
+  }
+  return _coinDetSvarerTilOnesTailAssetsPresent(value % 10);
 }
 
 Future<void> _playCoin11To19Composite(AudioPlayer player, int value) async {
@@ -439,6 +1168,11 @@ Future<void> _playCoin11To19Composite(AudioPlayer player, int value) async {
   if (useSplit) {
     await _playFirstOf(player, [kCoinDetSvarerTil]);
     await Future<void>.delayed(kMathTutorNumberToCoinPause);
+    final paaEnBare = await _firstExistingBasename(_coinPaaEnClipCandidates());
+    if (paaEnBare != null) {
+      await _playBasename(player, paaEnBare);
+      await Future<void>.delayed(kMathTutorNumberToCoinPause);
+    }
     final enOr1 = await _coinWordEnOrDigitOneBasename();
     if (enOr1 == null) {
       throw StateError('Matematiktutor mønt 11–19: mangler en/1 klip');
@@ -471,7 +1205,7 @@ Future<void> _playCoin11To19Composite(AudioPlayer player, int value) async {
   }
   await _playNumberClips(player, ones);
   await Future<void>.delayed(kMathTutorNumberToCoinPause);
-  await _playFirstOf(player, [kCoinEnereWord]);
+  await _playCoinDetSvarerTilOnesTailAfterDigit(player, ones);
 }
 
 Future<void> _playCoinClipOrTts({
@@ -487,7 +1221,7 @@ Future<void> _playCoinClipOrTts({
       await _playCoin11to19FluentChain(player, value);
       return;
     }
-    if (await _coinComposite11To19AssetsPresent()) {
+    if (await _coinComposite11To19AssetsPresent(value)) {
       await _playCoin11To19Composite(player, value);
       return;
     }
@@ -506,6 +1240,16 @@ Future<void> _playCoinClipOrTts({
       await _coinMultiTenWithOnesAssetsPresent(tens, ones)) {
     await _playCoinMultiTenWithOnesComposite(player, value);
     return;
+  }
+
+  /// Ét klip for hele tallet (fx `21.mp3`) — kun hvis den fulde guld-møntkæde mangler
+  /// (ellers lyder «21» to gange: efter «det første tal er» *og* som møntforklaring).
+  if (value >= 21 && value <= 40) {
+    final one = await _firstExistingBasename(['$value']);
+    if (one != null) {
+      await _playBasename(player, one);
+      return;
+    }
   }
 
   if (value == 10) {
@@ -568,17 +1312,10 @@ List<String> _minusFiles() => [
       mathTutorAudioFilenameSlug('minus'),
     ];
 
-List<String> _svaretErFiles() => [
-      mathTutorAudioFilenameSlug(kIntroSvaretEr),
-      'Svaret_er',
-      'svaret_er',
-    ];
-
 Future<bool> _introRequiredAssetsPresent({
   required int a,
   required int b,
   required bool isAddition,
-  int? minusAnswer,
 }) async {
   if (await _firstExistingBasename(_opgavenErFiles()) == null) {
     return false;
@@ -603,20 +1340,6 @@ Future<bool> _introRequiredAssetsPresent({
       }
     }
   }
-  if (!isAddition) {
-    final ans = minusAnswer;
-    if (ans == null) {
-      return false;
-    }
-    if (await _firstExistingBasename(_svaretErFiles()) == null) {
-      return false;
-    }
-    for (final part in mathTutorNumberPlayBasenames(ans)) {
-      if (await _firstExistingBasename(_digitClipCandidates(part)) == null) {
-        return false;
-      }
-    }
-  }
   return true;
 }
 
@@ -625,7 +1348,6 @@ Future<bool> playMathTutorPrerecordedIntroFirstScreen({
   required int operandLeft,
   required int operandRight,
   required bool isAddition,
-  int? minusAnswer,
   required Future<void> Function(String text) playCoinTtsFallback,
 }) async {
   final a = operandLeft;
@@ -633,18 +1355,11 @@ Future<bool> playMathTutorPrerecordedIntroFirstScreen({
   if (a < 0 || a > 100 || b < 0 || b > 100) {
     return false;
   }
-  if (!isAddition) {
-    final ans = minusAnswer;
-    if (ans == null || ans < 0 || ans > 100) {
-      return false;
-    }
-  }
 
   if (!await _introRequiredAssetsPresent(
     a: a,
     b: b,
     isAddition: isAddition,
-    minusAnswer: minusAnswer,
   )) {
     return false;
   }
@@ -673,18 +1388,6 @@ Future<bool> playMathTutorPrerecordedIntroFirstScreen({
   );
 
   await _playFirstOf(player, _kanDuSelvFiles());
-
-  if (!isAddition) {
-    final ans = minusAnswer!;
-    await _playFirstOf(player, _svaretErFiles());
-    await _playNumberClips(player, ans);
-    await Future<void>.delayed(kMathTutorNumberToCoinPause);
-    await _playCoinClipOrTts(
-      player: player,
-      value: ans,
-      playCoinTtsFallback: playCoinTtsFallback,
-    );
-  }
 
   return true;
 }
@@ -891,9 +1594,40 @@ Future<bool> mathTutorTryPlayOevProevIgen(AudioPlayer player) async {
   return true;
 }
 
+/// «Åbn en mappe nedenfor» på matematik-roden (fallback hvis fil mangler).
+Future<bool> mathTutorTryPlayAabenEnMappeNedenfor(AudioPlayer player) async {
+  final found = await _firstExistingBasename([
+    kAabenEnMappeNedenfor,
+    'Aaben_en_mappe_nedenfor',
+  ]);
+  if (found == null) return false;
+  try {
+    await _playBasename(player, found);
+  } catch (_) {
+    return false;
+  }
+  return true;
+}
+
+/// «Vælg hvilken opgave» på mappe med valg (undermapper / Spil — ingen skærmtekst).
+Future<bool> mathTutorTryPlayVaelgHvilkenOpgave(AudioPlayer player) async {
+  final found = await _firstExistingBasename([
+    kVaelgHvilkenOpgave,
+    mathTutorAudioFilenameSlug('Vælg hvilken opgave'),
+    mathTutorAudioFilenameSlug('Vælg hvilken opgave.'),
+  ]);
+  if (found == null) return false;
+  try {
+    await _playBasename(player, found);
+  } catch (_) {
+    return false;
+  }
+  return true;
+}
+
 const String kGuidedGodtDerEr = 'godt_der_er';
 
-/// «Godt der er» + tal + «enere».
+/// «Godt der er» + tal + **én** ener som `en`, ellers `enere`.
 Future<bool> mathTutorTryPlayGodtDerErEnere({
   required AudioPlayer player,
   required int enereCount,
@@ -904,14 +1638,17 @@ Future<bool> mathTutorTryPlayGodtDerErEnere({
   if (await _firstExistingBasename([kGuidedGodtDerEr]) == null) {
     return false;
   }
-  if (await _firstExistingBasename([kCoinEnereWord]) == null) {
+  if (await _firstExistingBasename(
+        _coinEnereUnitWordCandidates(enereCount),
+      ) ==
+      null) {
     return false;
   }
   await _playFirstOf(player, [kGuidedGodtDerEr]);
   await Future<void>.delayed(kMathTutorNumberToCoinPause);
   await _playNumberClips(player, enereCount);
   await Future<void>.delayed(kMathTutorNumberToCoinPause);
-  await _playFirstOf(player, [kCoinEnereWord]);
+  await _playFirstOf(player, _coinEnereUnitWordCandidates(enereCount));
   return true;
 }
 
