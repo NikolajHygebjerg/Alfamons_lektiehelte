@@ -65,8 +65,8 @@ class _KidSwitcherState extends State<KidSwitcher> {
             .maybeSingle();
 
         final points = libRes != null
-            ? (libRes['points_current'] as int? ?? 0)
-            : (active['points_current'] as int? ?? 0);
+            ? AlfamonEvolution.pointsFromJson(libRes['points_current'])
+            : AlfamonEvolution.pointsFromJson(active['points_current']);
 
         final stagesRes = await Supabase.instance.client
             .from('avatar_stages')

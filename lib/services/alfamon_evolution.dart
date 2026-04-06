@@ -27,11 +27,27 @@ class AlfamonEvolution {
     return 0;
   }
 
+  /// PostgREST kan levere heltal som [num] — undgå `as int`-fejl ved runtime.
+  static int stageIndexFromJson(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return 0;
+  }
+
+  static int pointsFromJson(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.round();
+    return 0;
+  }
+
   /// Sorterede `stage_index` fra `avatar_stages` (stigende).
   static List<int> sortedStageIndicesFromRows(List<dynamic> stages) {
-    final list = stages
-        .map((s) => (s as Map)['stage_index'] as int)
-        .toList();
+    final list = <int>[];
+    for (final s in stages) {
+      list.add(stageIndexFromJson((s as Map)['stage_index']));
+    }
     list.sort();
     return list;
   }

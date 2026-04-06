@@ -30,8 +30,11 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _loadStayLoggedInPreference() async {
     final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() => _stayLoggedIn = prefs.getBool('stayLoggedIn') ?? true);
+    if (!mounted) return;
+    final v = prefs.getBool('stayLoggedIn') ?? true;
+    // Undgå unødvendig setState (genskaber widget-træet og kan slå tastatur/fokus fra under indtastning).
+    if (v != _stayLoggedIn) {
+      setState(() => _stayLoggedIn = v);
     }
   }
 
@@ -125,28 +128,31 @@ class _AuthScreenState extends State<AuthScreen> {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: SvgPicture.asset(
-              bgAsset,
-              fit: BoxFit.cover,
-              allowDrawingOutsideViewBox: true,
-              errorBuilder: (context, error, stackTrace) => Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF5A1A0D),
-                      Color(0xFFE85A4A),
-                    ],
+            child: IgnorePointer(
+              child: SvgPicture.asset(
+                bgAsset,
+                fit: BoxFit.cover,
+                allowDrawingOutsideViewBox: true,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF5A1A0D),
+                        Color(0xFFE85A4A),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-          // Overlay med interaktive elementer placeret på designet
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
+          // Fylder hele området så hit-testing ikke falder igennem til underliggende lag.
+          Positioned.fill(
+            child: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
                 // Design-størrelse tilpasset iPad vs iPhone
                 final designWidth = isTablet ? 450.0 : 360.0;
                 final textSize = isTablet ? 16.0 : 14.0;
@@ -372,7 +378,8 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                 );
-              },
+                },
+              ),
             ),
           ),
         ],

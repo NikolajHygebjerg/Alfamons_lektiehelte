@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Kiste + antal guldmønter (nederst til **højre** på fx «I dag» – brug `kidZoneHorizontalPadding` (20) fra `kid_layout_constants.dart`).
-/// Tryk åbner Alfamons-siden (opgradering). [onAfterAlfamonsRoute] køres når man kommer tilbage (fx opfrisk guld).
-/// Bruger [kiste.png] (udtrukket fra SVG – flutter_svg viser ikke indlejret PNG i .svg).
+/// Tryk åbner Alfamons-siden. [onAfterAlfamonsRoute] køres når man kommer tilbage (fx opfrisk guld).
+/// Bruger [kiste.webp] — ingen Alfamon-forhåndsvisning her (kun statisk kiste + tal).
 class KidGoldTreasuryCorner extends StatelessWidget {
   const KidGoldTreasuryCorner({
     super.key,

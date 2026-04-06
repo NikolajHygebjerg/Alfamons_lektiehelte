@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/kid.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/alfamon_evolution.dart';
 import '../../utils/card_assets.dart';
 import '../../widgets/asset_or_network_image.dart';
 import '../../widgets/kid_parent_admin_corner.dart';
@@ -293,7 +294,7 @@ class _KidCard extends StatelessWidget {
 
     final libRes = await client
         .from('kid_avatar_library')
-        .select('avatar_id,current_stage_index')
+        .select('avatar_id,points_current')
         .eq('kid_id', kid.id)
         .inFilter('avatar_id', avatarIds);
 
@@ -302,19 +303,18 @@ class _KidCard extends StatelessWidget {
         .select('avatar_id,stage_index,image_url')
         .inFilter('avatar_id', avatarIds);
 
-    final libMap = <String, int>{};
     final libPoints = <String, int>{};
     for (final r in libRes as List) {
       final aid = r['avatar_id'] as String;
-      libMap[aid] = r['current_stage_index'] as int? ?? 0;
-      libPoints[aid] = (r['points_current'] as num?)?.toInt() ?? 0;
+      libPoints[aid] = AlfamonEvolution.pointsFromJson(r['points_current']);
     }
 
     final stageMap = <String, Map<int, String>>{};
     for (final s in stagesRes as List) {
       final aid = s['avatar_id'] as String;
       stageMap.putIfAbsent(aid, () => {});
-      stageMap[aid]![s['stage_index'] as int] = s['image_url'] as String? ?? '';
+      final si = AlfamonEvolution.stageIndexFromJson(s['stage_index']);
+      stageMap[aid]![si] = (s['image_url'] as String? ?? '').trim();
     }
 
     final options = <Map<String, dynamic>>[];
@@ -323,7 +323,16 @@ class _KidCard extends StatelessWidget {
       if (av == null) continue;
       final avMap = Map<String, dynamic>.from(av as Map);
       final avatarId = avMap['id'] as String;
-      final stageIdx = libMap[avatarId] ?? 0;
+      final stagesForAvatar = (stagesRes as List)
+          .where((s) => s['avatar_id'] == avatarId)
+          .toList();
+      final sorted = AlfamonEvolution.sortedStageIndicesFromRows(
+        stagesForAvatar,
+      );
+      final stageIdx = AlfamonEvolution.stageIndexFromPoints(
+        libPoints[avatarId] ?? 0,
+        sorted,
+      );
       var imageUrl = stageMap[avatarId]?[stageIdx];
       if ((imageUrl == null || imageUrl.isEmpty) && (stageMap[avatarId]?.isNotEmpty ?? false)) {
         final urls = stageMap[avatarId]!.values.where((u) => u.isNotEmpty).toList();

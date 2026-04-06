@@ -73,8 +73,8 @@ class _CurrentAvatarState extends State<CurrentAvatar> {
 
     // Én kilde til sandhed for udvikling: total point (samme som task completion).
     final points = libRes != null
-        ? (libRes['points_current'] as int? ?? 0)
-        : (active['points_current'] as int? ?? 0);
+        ? AlfamonEvolution.pointsFromJson(libRes['points_current'])
+        : AlfamonEvolution.pointsFromJson(active['points_current']);
 
     final avatarRes = await Supabase.instance.client
         .from('avatars')

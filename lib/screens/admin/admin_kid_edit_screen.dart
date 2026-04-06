@@ -4,6 +4,7 @@ import '../../models/kid.dart';
 import '../../models/task.dart';
 import '../../utils/recurring_task_schedule.dart';
 import '../../utils/danish_alfamon_sort.dart';
+import '../../services/alfamon_evolution.dart';
 import '../../widgets/asset_or_network_image.dart';
 import '../../widgets/admin/admin_menu_toolbar_button.dart';
 import '../../widgets/admin/recurring_task_schedule_dialog.dart';
@@ -85,19 +86,20 @@ class _AdminKidEditScreenState extends State<AdminKidEditScreen> {
         .from('avatar_stages')
         .select('avatar_id,stage_index,image_url');
 
+    /// Højeste [stage_index] med **ikke-tom** [image_url] — undgår at låse til tom højeste-trin-række
+    /// (så Atiach ikke viser æg når trin 4 findes men manglede URL i første sorterede række).
     final stageMap = <String, String>{};
-    final stagesList = (stageRes as List)
-        .cast<Map<String, dynamic>>()
-        .toList()
-      ..sort((a, b) {
-        final aidCmp = (a['avatar_id'] as String).compareTo(b['avatar_id'] as String);
-        if (aidCmp != 0) return aidCmp;
-        return (b['stage_index'] as int).compareTo(a['stage_index'] as int);
-      });
-    for (final s in stagesList) {
+    final bestIndex = <String, int>{};
+    for (final raw in stageRes as List) {
+      final s = Map<String, dynamic>.from(raw as Map);
       final aid = s['avatar_id'] as String;
-      if (!stageMap.containsKey(aid)) {
-        stageMap[aid] = s['image_url'] as String? ?? '';
+      final idx = AlfamonEvolution.stageIndexFromJson(s['stage_index']);
+      final url = (s['image_url'] as String? ?? '').trim();
+      if (url.isEmpty) continue;
+      final prev = bestIndex[aid];
+      if (prev == null || idx > prev) {
+        bestIndex[aid] = idx;
+        stageMap[aid] = url;
       }
     }
 
@@ -187,7 +189,9 @@ class _AdminKidEditScreenState extends State<AdminKidEditScreen> {
           .order('stage_index')
           .limit(1);
       final initialStage = (stagesRes as List).isNotEmpty
-          ? (stagesRes.first['stage_index'] as int)
+          ? AlfamonEvolution.stageIndexFromJson(
+              (stagesRes.first as Map)['stage_index'],
+            )
           : 0;
 
       await client.from('kid_avatar_library').insert({

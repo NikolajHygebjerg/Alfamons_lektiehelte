@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/kid.dart';
 import '../../widgets/admin/admin_menu_toolbar_button.dart';
+import '../../widgets/asset_or_network_image.dart';
 
 class AdminKidsScreen extends StatefulWidget {
   const AdminKidsScreen({super.key});
@@ -189,9 +190,22 @@ class _AdminKidsScreenState extends State<AdminKidsScreen> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage: k.avatarUrl != null ? NetworkImage(k.avatarUrl!) : null,
-                      child: k.avatarUrl == null ? const Icon(Icons.person) : null,
+                    leading: ClipOval(
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: k.avatarUrl != null && k.avatarUrl!.trim().isNotEmpty
+                            ? AssetOrNetworkImage(
+                                src: k.avatarUrl!,
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                              )
+                            : const ColoredBox(
+                                color: Color(0xFFE0E0E0),
+                                child: Icon(Icons.person, color: Colors.black45),
+                              ),
+                      ),
                     ),
                     title: Text(k.name),
                     subtitle: k.pinCode != null ? const Text('PIN beskyttet') : null,

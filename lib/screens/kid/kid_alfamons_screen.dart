@@ -140,7 +140,7 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
     final maxStageMap = <String, int>{};
     for (final s in stagesRes as List) {
       final aid = s['avatar_id'] as String;
-      final idx = s['stage_index'] as int;
+      final idx = AlfamonEvolution.stageIndexFromJson(s['stage_index']);
       stageMap.putIfAbsent(aid, () => {});
       stageMap[aid]![idx] = (s['image_url'] as String? ?? '').trim();
       if ((maxStageMap[aid] ?? -1) < idx) maxStageMap[aid] = idx;
@@ -157,7 +157,7 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
       letters.add(letter);
       final avatarId = avMap['id'] as String;
       final lib = libMap[avatarId];
-      final points = lib?['points_current'] as int? ?? 0;
+      final points = AlfamonEvolution.pointsFromJson(lib?['points_current']);
       final stagesForAvatar = (stagesRes as List)
           .where((s) => s['avatar_id'] == avatarId)
           .toList();
@@ -165,7 +165,8 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
         stagesForAvatar,
       );
       final stageIdx = AlfamonEvolution.stageIndexFromPoints(points, sorted);
-      final storedStage = lib?['current_stage_index'] as int? ?? 0;
+      final storedStage =
+          AlfamonEvolution.stageIndexFromJson(lib?['current_stage_index']);
       if (lib != null && storedStage != stageIdx) {
         await client
             .from('kid_avatar_library')
