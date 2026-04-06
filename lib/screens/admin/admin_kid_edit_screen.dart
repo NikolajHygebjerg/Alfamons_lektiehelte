@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/kid.dart';
 import '../../models/task.dart';
 import '../../utils/recurring_task_schedule.dart';
+import '../../utils/danish_alfamon_sort.dart';
+import '../../widgets/asset_or_network_image.dart';
 import '../../widgets/admin/admin_menu_toolbar_button.dart';
 import '../../widgets/admin/recurring_task_schedule_dialog.dart';
 
@@ -77,10 +79,7 @@ class _AdminKidEditScreenState extends State<AdminKidEditScreen> {
         .eq('kid_id', widget.kid.id)
         .maybeSingle();
 
-    final avatarsRes = await client
-        .from('avatars')
-        .select('id,name,letter')
-        .order('name');
+    final avatarsRes = await client.from('avatars').select('id,name,letter');
 
     final stageRes = await client
         .from('avatar_stages')
@@ -104,14 +103,22 @@ class _AdminKidEditScreenState extends State<AdminKidEditScreen> {
 
     final avatars = <Map<String, dynamic>>[];
     for (final a in avatarsRes as List) {
+      final name = (a['name'] as String?) ?? 'Alfamon';
+      if (isExcludedFromAdminAvatarPicker(name)) continue;
       final avatarId = a['id'] as String;
       avatars.add({
         'id': avatarId,
-        'name': a['name'] ?? 'Alfamon',
+        'name': name,
         'letter': a['letter'],
         'image_url': stageMap[avatarId],
       });
     }
+    avatars.sort(
+      (x, y) => compareDanishAlfamonName(
+        x['name'] as String? ?? '',
+        y['name'] as String? ?? '',
+      ),
+    );
 
     if (!mounted) return;
     final recurringMap = <String, Map<String, dynamic>>{};
@@ -481,9 +488,10 @@ class _AdminKidEditScreenState extends State<AdminKidEditScreen> {
                                             borderRadius:
                                                 const BorderRadius.vertical(
                                                     top: Radius.circular(11)),
-                                            child: Image.network(
-                                              url,
+                                            child: AssetOrNetworkImage(
+                                              src: url,
                                               width: double.infinity,
+                                              height: double.infinity,
                                               fit: BoxFit.cover,
                                             ),
                                           )

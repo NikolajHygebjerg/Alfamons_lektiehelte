@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../services/alfamon_evolution.dart';
 import 'alfamon_evolution_progress_bar.dart';
+import '../../../widgets/asset_or_network_image.dart';
 
 class CurrentAvatar extends StatefulWidget {
   final String kidId;
@@ -175,9 +176,9 @@ class _CurrentAvatarState extends State<CurrentAvatar> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: _imageUrl != null && _imageUrl!.isNotEmpty
-                      ? Image.network(
-                          _imageUrl!,
+                      ? AssetOrNetworkImage(
                           key: ValueKey('${_imageUrl}_$_currentStage'),
+                          src: _imageUrl!,
                           width: imageSize,
                           height: imageSize,
                           fit: BoxFit.cover,

@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/alfamon_evolution.dart';
 import '../../services/task_completion_service.dart';
+import '../../utils/card_assets.dart';
+import '../../widgets/asset_or_network_image.dart';
 import '../../widgets/kid_parent_admin_corner.dart';
 import 'widgets/alfamon_evolution_progress_bar.dart';
 import 'widgets/kid_session_nav_button.dart';
@@ -140,7 +142,7 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
       final aid = s['avatar_id'] as String;
       final idx = s['stage_index'] as int;
       stageMap.putIfAbsent(aid, () => {});
-      stageMap[aid]![idx] = s['image_url'] as String? ?? '';
+      stageMap[aid]![idx] = (s['image_url'] as String? ?? '').trim();
       if ((maxStageMap[aid] ?? -1) < idx) maxStageMap[aid] = idx;
     }
 
@@ -172,12 +174,20 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
             .eq('avatar_id', avatarId);
       }
       final maxStage = maxStageMap[avatarId] ?? 0;
-      final imageUrl = stageMap[avatarId]?[stageIdx];
+      var imageUrl = stageMap[avatarId]?[stageIdx];
+      if (imageUrl == null || imageUrl.isEmpty) {
+        final paths = CardAssets.getCardImagePathsToTry(
+          avMap['name'] as String? ?? 'Alfamon',
+          stageIdx,
+          letter: avMap['letter'] as String?,
+        );
+        if (paths.isNotEmpty) imageUrl = paths.first;
+      }
       alphamons[letter] = _UnlockedAlphamon(
         avatarId: avatarId,
         letter: letter,
         name: avMap['name'] as String? ?? 'Alfamon',
-        imageUrl: imageUrl?.isNotEmpty == true ? imageUrl : null,
+        imageUrl: imageUrl != null && imageUrl.isNotEmpty ? imageUrl : null,
         currentStage: stageIdx,
         maxStage: maxStage,
         pointsInvested: points,
@@ -452,8 +462,8 @@ class _KidAlfamonsScreenState extends State<KidAlfamonsScreen> {
                   alphamon!.imageUrl!.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(rad - 2),
-                  child: Image.network(
-                    alphamon.imageUrl!,
+                  child: AssetOrNetworkImage(
+                    src: alphamon.imageUrl!,
                     fit: BoxFit.cover,
                   ),
                 )
@@ -845,6 +855,12 @@ class _AlfamonUpgradeSheetState extends State<_AlfamonUpgradeSheet> {
   bool _busy = false;
   String? _previewImageUrl;
 
+  /// Sorterede [avatar_stages.stage_index] til billedvalg under pending ændring.
+  List<int> _sortedStageIndices = const [];
+
+  /// image_url pr. [stage_index] fra Supabase (æg m.m. — ikke kun bundt-assets).
+  Map<int, String> _stageImageByIndex = {};
+
   int get _maxPositive => math.min(
     _committedTreasury,
     AlfamonEvolution.maxProgressPoints - _committedPoints,
@@ -865,6 +881,46 @@ class _AlfamonUpgradeSheetState extends State<_AlfamonUpgradeSheet> {
     _committedTreasury = widget.treasuryGold;
     _committedPoints = widget.alphamon.pointsInvested;
     _previewImageUrl = widget.alphamon.imageUrl;
+    _loadSortedStageIndices();
+  }
+
+  Future<void> _loadSortedStageIndices() async {
+    final res = await Supabase.instance.client
+        .from('avatar_stages')
+        .select('stage_index,image_url')
+        .eq('avatar_id', widget.alphamon.avatarId)
+        .order('stage_index');
+    if (!mounted) return;
+    final list = res as List;
+    final sorted = AlfamonEvolution.sortedStageIndicesFromRows(list);
+    final byIndex = <int, String>{};
+    for (final row in list) {
+      final m = row as Map;
+      final si = m['stage_index'] as int;
+      final url = (m['image_url'] as String? ?? '').trim();
+      if (url.isNotEmpty) byIndex[si] = url;
+    }
+    setState(() {
+      _sortedStageIndices = sorted;
+      _stageImageByIndex = byIndex;
+      _previewImageUrl = _resolveImageUrl(_committedPoints + _pendingDelta, sorted);
+    });
+  }
+
+  String? _resolveImageUrl(int points, List<int> sorted) {
+    if (sorted.isEmpty) {
+      return _previewImageUrl ?? widget.alphamon.imageUrl;
+    }
+    final idx = AlfamonEvolution.stageIndexFromPoints(points, sorted);
+    final fromDb = _stageImageByIndex[idx];
+    if (fromDb != null && fromDb.isNotEmpty) return fromDb;
+    final paths = CardAssets.getCardImagePathsToTry(
+      widget.alphamon.name,
+      idx,
+      letter: widget.alphamon.letter,
+    );
+    if (paths.isNotEmpty) return paths.first;
+    return _previewImageUrl;
   }
 
   Future<void> _refreshPreviewAfterTransfer() async {
@@ -878,26 +934,24 @@ class _AlfamonUpgradeSheetState extends State<_AlfamonUpgradeSheet> {
     final points = (lib?['points_current'] as num?)?.toInt() ?? 0;
     final stagesRes = await client
         .from('avatar_stages')
-        .select('stage_index')
+        .select('stage_index,image_url')
         .eq('avatar_id', widget.alphamon.avatarId)
         .order('stage_index');
-    final sorted = AlfamonEvolution.sortedStageIndicesFromRows(
-      stagesRes as List,
-    );
-    final stageIdx = AlfamonEvolution.stageIndexFromPoints(points, sorted);
-    final stageData = await client
-        .from('avatar_stages')
-        .select('image_url')
-        .eq('avatar_id', widget.alphamon.avatarId)
-        .eq('stage_index', stageIdx)
-        .maybeSingle();
-    final url = stageData?['image_url'] as String?;
+    final list = stagesRes as List;
+    final sorted = AlfamonEvolution.sortedStageIndicesFromRows(list);
+    final byIndex = <int, String>{};
+    for (final row in list) {
+      final m = row as Map;
+      final si = m['stage_index'] as int;
+      final url = (m['image_url'] as String? ?? '').trim();
+      if (url.isNotEmpty) byIndex[si] = url;
+    }
     if (mounted) {
       setState(() {
         _committedPoints = points;
-        if (url != null && url.isNotEmpty) {
-          _previewImageUrl = url;
-        }
+        _sortedStageIndices = sorted;
+        _stageImageByIndex = byIndex;
+        _previewImageUrl = _resolveImageUrl(points, sorted);
       });
     }
   }
@@ -1044,7 +1098,7 @@ class _AlfamonUpgradeSheetState extends State<_AlfamonUpgradeSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final url = _previewImageUrl;
+    final url = _resolveImageUrl(_previewPoints, _sortedStageIndices);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
@@ -1069,15 +1123,11 @@ class _AlfamonUpgradeSheetState extends State<_AlfamonUpgradeSheet> {
               child: url != null && url.isNotEmpty
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      child: Image.network(
-                        url,
-                        fit: BoxFit.contain,
+                      child: AssetOrNetworkImage(
                         key: ValueKey(url),
-                        errorBuilder: (_, __, ___) => Icon(
-                          Icons.pets,
-                          size: 120,
-                          color: theme.colorScheme.primary,
-                        ),
+                        src: url,
+                        fit: BoxFit.contain,
+                        height: 240,
                       ),
                     )
                   : Icon(

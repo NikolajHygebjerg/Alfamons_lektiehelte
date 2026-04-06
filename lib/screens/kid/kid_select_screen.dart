@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/kid.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/card_assets.dart';
+import '../../widgets/asset_or_network_image.dart';
 import '../../widgets/kid_parent_admin_corner.dart';
 
 class KidSelectScreen extends StatefulWidget {
@@ -301,8 +303,11 @@ class _KidCard extends StatelessWidget {
         .inFilter('avatar_id', avatarIds);
 
     final libMap = <String, int>{};
+    final libPoints = <String, int>{};
     for (final r in libRes as List) {
-      libMap[r['avatar_id'] as String] = r['current_stage_index'] as int? ?? 0;
+      final aid = r['avatar_id'] as String;
+      libMap[aid] = r['current_stage_index'] as int? ?? 0;
+      libPoints[aid] = (r['points_current'] as num?)?.toInt() ?? 0;
     }
 
     final stageMap = <String, Map<int, String>>{};
@@ -323,6 +328,14 @@ class _KidCard extends StatelessWidget {
       if ((imageUrl == null || imageUrl.isEmpty) && (stageMap[avatarId]?.isNotEmpty ?? false)) {
         final urls = stageMap[avatarId]!.values.where((u) => u.isNotEmpty).toList();
         if (urls.isNotEmpty) imageUrl = urls.first;
+      }
+      if (imageUrl == null || imageUrl.isEmpty) {
+        final paths = CardAssets.getCardImagePathsToTry(
+          avMap['name'] as String? ?? 'Alfamon',
+          stageIdx,
+          letter: avMap['letter'] as String?,
+        );
+        if (paths.isNotEmpty) imageUrl = paths.first;
       }
       if (imageUrl != null && imageUrl.isNotEmpty) {
         options.add({
@@ -383,8 +396,8 @@ class _KidCard extends StatelessWidget {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              o['image_url'] as String,
+                            child: AssetOrNetworkImage(
+                              src: o['image_url'] as String,
                               width: 100,
                               height: 100,
                               fit: BoxFit.cover,
@@ -458,19 +471,12 @@ class _KidCard extends StatelessWidget {
                       children: [
                         Positioned.fill(
                           child: kid.avatarUrl != null && kid.avatarUrl!.isNotEmpty
-                              ? (kid.avatarUrl!.startsWith('assets/')
-                                  ? SvgPicture.asset(
-                                      kid.avatarUrl!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                    )
-                                  : Image.network(
-                                      kid.avatarUrl!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                    ))
+                              ? AssetOrNetworkImage(
+                                  src: kid.avatarUrl!,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.cover,
+                                )
                               : Container(
                                   color: const Color(0xFFF9C433).withValues(alpha: 0.9),
                                   child: Center(

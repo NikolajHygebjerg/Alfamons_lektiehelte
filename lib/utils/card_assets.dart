@@ -121,6 +121,8 @@ class CardAssets {
   /// Returnerer asset-path for kort (f.eks. 'assets/Ifflekort1.svg') eller null.
   /// Navne har stort startbogstav, stage 1-4. Understøtter både 0- og 1-baseret stageIndex.
   /// letter: bruges først (pålidelig 1:1 mapping A→Atiach, B→Bezzle).
+  /// Æg bruger ikke *kort0* i assets — kun kort1–4 findes lokalt; trin 0 (æg) kommer fra
+  /// [avatar_stages.image_url] i Supabase (samme som Bezzle), typisk Storage-public URL.
   static String? getCardAssetPath(String avatarName, int stageIndex, {String? letter}) {
     // Database kan bruge 0-3 (baby→stærkeste) eller 1-4
     final stage = (stageIndex >= 1 && stageIndex <= 4)

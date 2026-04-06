@@ -4,7 +4,7 @@
 name: alfamon_flutter
 description: "Web admin build — uden barn-assets og uden alfamon_trace."
 publish_to: 'none'
-version: 1.0.3+4
+version: 1.0.6+6
 
 environment:
   sdk: ^3.11.1
@@ -48,7 +48,10 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
-  # Ingen assets/ — ellers kopierer Flutter hele spil-biblioteket (~300MB+) ind i build/web.
+  # Login-baggrunde til admin-web (samme SVG som native — hele assets/ er ~300MB+).
+  assets:
+    - assets/loginipad.svg
+    - assets/loginiphone.svg
 
 flutter_launcher_icons:
   image_path: "assets/nytikon.png"

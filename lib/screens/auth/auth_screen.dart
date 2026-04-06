@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -117,32 +116,32 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final shortestSide = MediaQuery.of(context).size.shortestSide;
     final isTablet = shortestSide >= 600;
-    final bgAsset = isTablet ? 'assets/loginipad.svg' : 'assets/loginiphone.svg';
+    final bgAsset =
+        isTablet ? 'assets/loginipad.svg' : 'assets/loginiphone.svg';
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Web-admin: ingen SVG-assets (hurtigere load); native: design-baggrund.
           Positioned.fill(
-            child: kIsWeb
-                ? Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFF5A1A0D),
-                          Color(0xFFE85A4A),
-                        ],
-                      ),
-                    ),
-                  )
-                : SvgPicture.asset(
-                    bgAsset,
-                    fit: BoxFit.cover,
+            child: SvgPicture.asset(
+              bgAsset,
+              fit: BoxFit.cover,
+              allowDrawingOutsideViewBox: true,
+              errorBuilder: (context, error, stackTrace) => Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF5A1A0D),
+                      Color(0xFFE85A4A),
+                    ],
                   ),
+                ),
+              ),
+            ),
           ),
           // Overlay med interaktive elementer placeret på designet
           SafeArea(
